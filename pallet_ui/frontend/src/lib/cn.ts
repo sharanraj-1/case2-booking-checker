@@ -43,3 +43,14 @@ export function niceDate(ddmmyyyy: string | null | undefined): string {
   const dt = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));
   return dt.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 }
+
+/** Smoothly scroll an element into view inside whatever scrolls it, then pulse a highlight ring. */
+export function focusEl(id: string) {
+  const el = document.getElementById(id);
+  if (!el) return false;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.classList.remove("flash");
+  void el.offsetWidth;
+  el.classList.add("flash");
+  return true;
+}

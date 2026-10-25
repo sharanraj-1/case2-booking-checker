@@ -3,7 +3,7 @@
 export type Tone = "red" | "amber" | "green";
 export type Severity = "Red" | "Data" | "Amber" | "Advisory";
 
-export interface Option { value: string; label: string; hint: string; icon: string }
+export interface Option { value: string; label: string; hint: string; icon: string; suggested?: boolean }
 
 export interface Ask {
   field: string;
@@ -46,7 +46,7 @@ export interface Result {
   id: string; status: string;
   view: { tone: Tone; label: string; headline: string; sub: string };
   counts: { red: number; data: number; amber: number; advisory: number; passed: number };
-  rules: { id: string; name: string; state: "Pass" | "Red" | "Amber" | "Data" }[];
+  rules: { id: string; name: string; state: "Pass" | "Red" | "Amber" | "Data"; why: string }[];
   findings: Finding[]; options: CarrierOption[]; recommendation: string | null; reason: string; why_others: string[];
   load: { gross: string | null; pallets: string | null; per_pallet: string | null; priority: string };
   confirmation: {
@@ -55,6 +55,17 @@ export interface Result {
   };
   next_steps: { title: string; body: string; link?: string; link_label?: string }[];
   notices: string[];
+  invoice: { rows: { n: number; title: string; state: "ready" | "check" | "add" | "info"; detail: string }[];
+    counts: Record<string, number>; source: string };
+  country: { country: string; export: string[]; import: string[]; statement_on_origin: string | null; sources: string[] } | null;
+  live: LiveView | null;
+  can_live: boolean;
+}
+
+export interface LiveQuote { service: string; price: number; transit: string | null; mode: string }
+export interface LiveView {
+  ok: boolean; error: string | null; quotes: LiveQuote[]; pallet_type?: string; fetched_at?: string; source?: string;
+  ours?: { carrier: string; cost: number; cost_label: string }; summary?: string;
 }
 
 export interface ChatView {
@@ -75,6 +86,7 @@ export interface FileView {
 
 export interface Payload {
   ack: string | null; ai: boolean; today: string; flash: string | null; chat: ChatView; file: FileView | null;
+  download: { id: string; name: string; b64: string } | null;
   coo_options: string[]; item_fields: Record<string, [string, string, string]>; tariff_link: string;
 }
 

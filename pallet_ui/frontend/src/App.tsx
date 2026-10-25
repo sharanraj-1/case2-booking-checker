@@ -64,6 +64,12 @@ export default function App() {
     return () => clearTimeout(t);
   }, [pending]);
 
+  const downloaded = useRef<string | null>(null);
+  useEffect(() => {  // a file the server prepared (e.g. the draft invoice): save it once
+    const d = p?.download;
+    if (d && d.id !== downloaded.current) { downloaded.current = d.id; downloadB64(d.b64, d.name); setToast(`Downloaded ${d.name}`); }
+  }, [p?.download]);
+
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 5000); return () => clearTimeout(t); } }, [toast]);
 
   const send = useCallback((ev: UIEvent) => {
@@ -129,7 +135,7 @@ export default function App() {
   }
 
   const started = startedLocal || p.chat.messages.length > 1;
-  const ctx = { send, pending: !!pending, today: p.today, coo: p.coo_options, fields: p.item_fields, tariff: p.tariff_link };
+  const ctx = { send, pending: !!pending, pendingType: pending?.type ?? null, today: p.today, coo: p.coo_options, fields: p.item_fields, tariff: p.tariff_link };
   const pendingText = pending && ["say", "answer", "item", "edit", "remove_item", "fix"].includes(pending.type) && tab === "book"
     ? (pending.type === "say" || pending.type === "answer" ? pending.label ?? null : null) : null;
 
@@ -146,12 +152,12 @@ export default function App() {
                 onStart={goBook} onFile={goFile} onConfirm={() => send({ type: "confirm" })}
                 onReset={() => { send({ type: "reset" }); setStartedLocal(false); toTop(); }} />
             ) : (
-              <FileView file={p.file} send={send} pending={!!pending && ["sample", "upload", "file_clear"].includes(pending.type)} inputRef={fileInputRef} openId={openId} setOpenId={setOpenId} />
+              <FileView file={p.file} send={send} pendingType={pending?.type ?? null} pending={!!pending && ["sample", "upload", "file_clear"].includes(pending.type)} inputRef={fileInputRef} openId={openId} setOpenId={setOpenId} />
             )}
           </motion.div>
         </AnimatePresence>
         <footer className="mt-20 border-t border-white/6 pt-6 text-[12.5px] leading-relaxed text-faint">
-          Rules, statuses, carrier picks and dates come from a fixed rulebook and rate card, worked out in code. {p.ai ? "The assistant only reads your messages; it never decides a result." : ""} Prices are the fixed rate card, not live quotes. Delivery dates are estimates in working days. Today in London: {p.today}.
+          Rules, statuses, carrier picks and dates come from a fixed rulebook and rate card, worked out in code. {p.ai ? "The assistant only reads your messages and only answers from checked guidance; it never decides a result." : ""} Our carrier pick uses the fixed rate card; live market prices are shown for reference only. Delivery dates are estimates in working days. Today in London: {p.today}.
         </footer>
       </main>
       <CommandPalette open={palette} setOpen={setPalette} actions={actions} />

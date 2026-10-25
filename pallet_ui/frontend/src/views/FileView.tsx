@@ -27,11 +27,12 @@ export function downloadB64(b64: string, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-export function FileView({ file, send, pending, inputRef, openId, setOpenId }: {
-  file: FV | null; send: Send; pending: boolean; inputRef: React.RefObject<HTMLInputElement>; openId: string | null; setOpenId: (id: string | null) => void;
+export function FileView({ file, send, pending, pendingType, inputRef, openId, setOpenId }: {
+  file: FV | null; send: Send; pending: boolean; pendingType: string | null; inputRef: React.RefObject<HTMLInputElement>; openId: string | null; setOpenId: (id: string | null) => void;
 }) {
   const [drag, setDrag] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [filter, setFilter] = useState<string | null>(null);
   async function upload(list: FileList | File[] | null) {
     if (!list || !list.length) return;
     const arr = Array.from(list);
@@ -104,27 +105,31 @@ export function FileView({ file, send, pending, inputRef, openId, setOpenId }: {
           {file.counts.total > 0 && (
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               {[
-                { label: "Bookings", v: file.counts.total, icon: <FileSpreadsheet className="h-4 w-4 text-cyan" />, sub: "in this file" },
-                { label: "Can't ship yet", v: file.counts.Blocked, icon: <XCircle className="h-4 w-4 text-bad" />, sub: "need fixing first" },
-                { label: "OK to ship", v: file.counts["Ready with warnings"], icon: <AlertTriangle className="h-4 w-4 text-warn" />, sub: "small things to sort" },
-                { label: "Good to go", v: file.counts.Ready, icon: <CheckCircle2 className="h-4 w-4 text-good" />, sub: "all checks passed" },
+                { key: null, label: "Bookings", v: file.counts.total, icon: <FileSpreadsheet className="h-4 w-4 text-cyan" />, sub: "show all" },
+                { key: "Blocked", label: "Can't ship yet", v: file.counts.Blocked, icon: <XCircle className="h-4 w-4 text-bad" />, sub: "tap to show" },
+                { key: "Ready with warnings", label: "OK to ship", v: file.counts["Ready with warnings"], icon: <AlertTriangle className="h-4 w-4 text-warn" />, sub: "tap to show" },
+                { key: "Ready", label: "Good to go", v: file.counts.Ready, icon: <CheckCircle2 className="h-4 w-4 text-good" />, sub: "tap to show" },
               ].map((m, i) => (
                 <Reveal key={m.label} i={i}>
-                  <TiltCard max={5} className="p-5">
-                    <div className="flex items-center gap-2 text-[12.5px] text-muted">{m.icon}{m.label}</div>
-                    <div className="mt-2 text-[38px] font-semibold leading-none tracking-[-0.04em]"><Counter value={m.v} /></div>
-                    <div className="mt-1 text-[12px] text-faint">{m.sub}</div>
-                  </TiltCard>
+                  <button onClick={() => setFilter(m.key)} className="block h-full w-full cursor-pointer text-left outline-none focus-visible:ring-2 focus-visible:ring-violet/70 rounded-3xl" aria-pressed={filter === m.key}>
+                    <TiltCard max={5} glow={filter === m.key && m.key !== null} className={cn("p-5 transition-colors", filter === m.key ? "bg-white/[0.08]" : "hover:bg-white/[0.06]")}>
+                      <div className="flex items-center gap-2 text-[12.5px] text-muted">{m.icon}{m.label}</div>
+                      <div className="mt-2 text-[38px] font-semibold leading-none tracking-[-0.04em]"><Counter value={m.v} /></div>
+                      <div className="mt-1 text-[12px] text-faint">{filter === m.key ? (m.key ? "showing these" : "showing all") : m.sub}</div>
+                    </TiltCard>
+                  </button>
                 </Reveal>
               ))}
             </div>
           )}
 
           <div className="space-y-2.5">
-            {file.rows.map((r, i) => (
+            {filter && <div className="flex items-center gap-2 text-[13px] text-muted">Showing {file.rows.filter((r) => r.status === filter).length} of {file.rows.length}
+              <button onClick={() => setFilter(null)} className="tile rounded-lg border border-white/10 px-2 py-1 text-[12.5px]">Show all</button></div>}
+            {file.rows.filter((r) => !filter || r.status === filter).map((r, i) => (
               <Reveal key={r.id} i={i}>
                 <motion.button whileHover={{ x: 3 }} whileTap={{ scale: 0.99 }} onClick={() => setOpenId(r.id)}
-                  className="glass group flex w-full items-center gap-4 rounded-2xl p-4 text-left transition-colors hover:bg-white/[0.07]">
+                  className="glass group flex min-h-[72px] w-full cursor-pointer items-center gap-4 rounded-2xl p-4 text-left outline-none transition-colors hover:border-violet/40 hover:bg-white/[0.07] focus-visible:ring-2 focus-visible:ring-violet/70">
                   <span className={cn("h-10 w-1 shrink-0 rounded-full", { red: "bg-bad", amber: "bg-warn", green: "bg-good" }[r.tone])} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -150,7 +155,8 @@ export function FileView({ file, send, pending, inputRef, openId, setOpenId }: {
       <Drawer open={!!open} onClose={() => setOpenId(null)} title={open ? `${open.id} · ${open.confirmation.seller}` : ""}
         extra={open && file?.rows.find((x) => x.id === openId)?.edited ? (
           <Button size="sm" variant="soft" onClick={() => send({ type: "file_undo", booking_id: openId })}><RotateCcw className="h-3.5 w-3.5" /> Undo my changes</Button>) : null}>
-        {open && <Results r={open} pending={pending} onFix={(a) => send({ type: "fix", scope: "file", booking_id: openId, action: a })} />}
+        {open && <Results r={open} pending={!!pendingType} onFix={(a) => send({ type: "fix", scope: "file", booking_id: openId, action: a })}
+          onEvent={send} scope="file" pendingType={pendingType} />}
       </Drawer>
     </div>
   );

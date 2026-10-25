@@ -70,7 +70,8 @@ def test_typed_answers_without_ai_go_to_the_asked_field():
 def test_invalid_typed_value_explains_options():
     sess = bridge.new_session()
     send(sess, ev("answer", field="dest_city", value="Munich"))
-    assert "Munich" in sess["chat"]["messages"][-1]["text"] and "Berlin" in sess["chat"]["messages"][-1]["text"]
+    text = sess["chat"]["messages"][-1]["text"]
+    assert "Munich" in text and "Frankfurt" in text and "300 km" in text  # closest served city suggested
 
 
 def test_edit_pallets_shows_change_and_effect():

@@ -1,13 +1,13 @@
 // The control for the current question: option tiles, number, date, text or a product card.
 import { motion } from "framer-motion";
-import { ArrowRight, ExternalLink, Minus, Plus } from "lucide-react";
+import { ArrowRight, ChevronRight, ExternalLink, Minus, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "../components/fx";
 import { OptionIcon } from "../components/Icon";
 import { addDays, cn, EASE, fmt, niceDate, toDDMMYYYY, toISO } from "../lib/cn";
 import type { Ask, Item, Send } from "../types";
 
-export interface AskCtx { send: Send; pending: boolean; today: string; coo: string[]; fields: Record<string, [string, string, string]>; tariff: string }
+export interface AskCtx { send: Send; pending: boolean; pendingType: string | null; today: string; coo: string[]; fields: Record<string, [string, string, string]>; tariff: string }
 
 export function AskControl({ ask, ctx, items }: { ask: Ask; ctx: AskCtx; items: Item[] }) {
   return (
@@ -35,14 +35,16 @@ function Choice({ ask, ctx }: { ask: Ask; ctx: AskCtx }) {
       {opts.map((o, i) => (
         <motion.button key={o.value} disabled={ctx.pending}
           initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05, duration: 0.4, ease: EASE }}
-          whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}
+          whileHover={{ y: -3 }} whileTap={{ scale: 0.96 }}
           onClick={() => ctx.send({ type: "answer", field: ask.field, value: o.value, label: o.label })}
-          className="group flex min-h-[64px] items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3.5 text-left transition-colors hover:border-violet/50 hover:bg-violet/[0.08] disabled:opacity-50">
+          className={cn("group relative flex min-h-[76px] cursor-pointer items-center gap-3 rounded-2xl border p-4 text-left outline-none transition-[border-color,background-color,box-shadow] duration-200 focus-visible:ring-2 focus-visible:ring-violet/70 disabled:cursor-not-allowed disabled:opacity-50",
+            o.suggested ? "glow-border border-cyan/40 bg-cyan/[0.07] hover:bg-cyan/[0.11]" : "border-white/10 bg-white/[0.04] hover:border-violet/55 hover:bg-violet/[0.09] hover:shadow-[0_10px_30px_rgba(0,0,0,0.35)]")}>
           <OptionIcon name={o.icon} />
-          <span className="min-w-0">
-            <span className="block text-[15px] font-medium">{o.label}</span>
-            {o.hint && <span className="block truncate text-[12.5px] text-muted">{o.hint}</span>}
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-2 text-[15.5px] font-medium">{o.label}{o.suggested && <span className="rounded-full bg-cyan/15 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-cyan">Suggested</span>}</span>
+            {o.hint && <span className={cn("block truncate text-[12.5px]", o.suggested ? "text-cyan/90" : "text-muted")}>{o.hint}</span>}
           </span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-fg" />
         </motion.button>
       ))}
     </div>
@@ -90,8 +92,8 @@ function DateAsk({ ask, ctx }: { ask: Ask; ctx: AskCtx }) {
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {quick.map((q) => (
-          <motion.button whileTap={{ scale: 0.96 }} key={q.label} disabled={ctx.pending} onClick={() => send(q.value, q.label)}
-            className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-left hover:border-violet/50 hover:bg-violet/[0.08]">
+          <motion.button whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} key={q.label} disabled={ctx.pending} onClick={() => send(q.value, q.label)}
+            className="min-h-[64px] cursor-pointer rounded-2xl border border-white/10 bg-white/[0.04] p-3.5 text-left outline-none transition-colors hover:border-violet/55 hover:bg-violet/[0.09] focus-visible:ring-2 focus-visible:ring-violet/70">
             <div className="text-[14px] font-medium">{q.label}</div><div className="text-[12px] text-muted">{niceDate(q.value)}</div>
           </motion.button>
         ))}

@@ -1,10 +1,10 @@
 // "Your booking": live summary that the seller can tap to change. Updates after every answer.
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, CircleDashed, Minus, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, CircleDashed, Minus, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { Button, Pill } from "../components/fx";
 import { Flag } from "../components/Icon";
-import { cn, EASE, niceDate, toDDMMYYYY, toISO } from "../lib/cn";
+import { cn, EASE, focusEl, niceDate, toDDMMYYYY, toISO } from "../lib/cn";
 import type { ChatView, Row } from "../types";
 import { ItemForm, type AskCtx } from "./Ask";
 
@@ -85,27 +85,30 @@ export function LiveCard({ chat, ctx }: { chat: ChatView; ctx: AskCtx }) {
       <div className="mt-3 divide-y divide-white/6">
         {chat.rows.map((row) => (
           <div key={row.key}>
-            <div className="flex items-center gap-2 py-2.5">
+            <div className={cn("-mx-2 flex min-h-[46px] items-center gap-2 rounded-xl px-2 transition-colors", row.kind !== "stepper" && "cursor-pointer hover:bg-white/[0.05]", open === row.key && "bg-white/[0.05]")}
+              onClick={() => row.kind !== "stepper" || row.raw == null ? setOpen(open === row.key ? null : row.key) : undefined}
+              role={row.kind !== "stepper" || row.raw == null ? "button" : undefined} tabIndex={row.kind !== "stepper" || row.raw == null ? 0 : undefined}
+              onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && (row.kind !== "stepper" || row.raw == null)) { e.preventDefault(); setOpen(open === row.key ? null : row.key); } }}>
               <span className="flex-1 text-[13.5px] text-muted">{row.label}{row.calculated && <span className="ml-1.5 text-[11px] text-faint">(calculated)</span>}</span>
               {row.kind === "stepper" && row.raw != null ? (
                 <span className="flex items-center gap-1.5">
                   <motion.button whileTap={{ scale: 0.85 }} disabled={ctx.pending || Number(row.raw) <= 1} aria-label="One fewer pallet"
                     onClick={() => ctx.send({ type: "edit", field: "pallets", value: "-1", label: String(Number(row.raw) - 1) })}
-                    className="grid h-7 w-7 place-items-center rounded-lg border border-white/10 bg-white/[0.05] disabled:opacity-40"><Minus className="h-3.5 w-3.5" /></motion.button>
+                    className="grid h-9 w-9 cursor-pointer place-items-center rounded-xl border border-white/10 bg-white/[0.05] transition-colors hover:border-violet/50 hover:bg-violet/[0.1] disabled:cursor-not-allowed disabled:opacity-40"><Minus className="h-4 w-4" /></motion.button>
                   <motion.span key={String(row.raw)} initial={{ y: -8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="w-8 text-center text-[14px] font-semibold">{row.display}</motion.span>
                   <motion.button whileTap={{ scale: 0.85 }} disabled={ctx.pending} aria-label="One more pallet"
                     onClick={() => ctx.send({ type: "edit", field: "pallets", value: "+1", label: String(Number(row.raw) + 1) })}
-                    className="grid h-7 w-7 place-items-center rounded-lg border border-white/10 bg-white/[0.05]"><Plus className="h-3.5 w-3.5" /></motion.button>
+                    className="grid h-9 w-9 cursor-pointer place-items-center rounded-xl border border-white/10 bg-white/[0.05] transition-colors hover:border-violet/50 hover:bg-violet/[0.1] disabled:cursor-not-allowed disabled:opacity-40"><Plus className="h-4 w-4" /></motion.button>
                 </span>
               ) : (
-                <button onClick={() => setOpen(open === row.key ? null : row.key)} className="press group flex max-w-[60%] items-center gap-1.5 text-right">
+                <span className="group flex max-w-[62%] items-center gap-1.5 text-right">
                   {row.display ? <span className="truncate text-[14px] font-medium">{row.kind === "date" ? niceDate(row.display) : row.display}</span>
-                    : <span className={cn("text-[13px]", row.missing ? "text-warn" : "text-faint")}>{row.missing ? "Needed" : row.key === "cartons" || row.key === "declared_value" ? "From products" : "—"}</span>}
-                  <Pencil className="h-3 w-3 text-faint opacity-0 transition-opacity group-hover:opacity-100" />
-                </button>
+                    : <span className={cn("text-[13px]", row.missing ? "font-medium text-warn" : "text-faint")}>{row.missing ? "Tap to add" : row.key === "cartons" || row.key === "declared_value" ? "From products" : "—"}</span>}
+                  <ChevronRight className={cn("h-3.5 w-3.5 text-faint transition-transform", open === row.key && "rotate-90")} />
+                </span>
               )}
             </div>
-            <AnimatePresence>{open === row.key && <Editor row={row} ctx={ctx} close={() => setOpen(null)} />}</AnimatePresence>
+            <AnimatePresence>{open === row.key && <div onClick={(e) => e.stopPropagation()}><Editor row={row} ctx={ctx} close={() => setOpen(null)} /></div>}</AnimatePresence>
           </div>
         ))}
       </div>
@@ -113,22 +116,23 @@ export function LiveCard({ chat, ctx }: { chat: ChatView; ctx: AskCtx }) {
       <div className="mt-4">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-[13px] font-medium">Products</span>
-          {chat.items.length > 0 && <button onClick={() => setEditItem(-1)} className="press flex items-center gap-1 text-[12.5px] text-cyan"><Plus className="h-3.5 w-3.5" /> Add another</button>}
+          {chat.items.length > 0 && <button onClick={() => setEditItem(-1)} className="tile flex items-center gap-1 rounded-xl border border-cyan/25 bg-cyan/[0.06] px-2.5 py-1.5 text-[12.5px] text-cyan"><Plus className="h-3.5 w-3.5" /> Add another</button>}
         </div>
         {chat.items.length === 0 && <div className="rounded-2xl border border-dashed border-white/12 p-3 text-[13px] text-faint">No products yet.</div>}
         <div className="space-y-2">
           {chat.items.map((it) => (
-            <div key={it.index} className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
+            <div key={it.index} className={cn("rounded-2xl border bg-white/[0.03] p-3 transition-colors", editItem === it.index ? "border-violet/40" : "border-white/8 hover:border-white/15")}>
               <div className="flex items-start gap-2">
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 cursor-pointer" role="button" tabIndex={0} onClick={() => setEditItem(editItem === it.index ? null : it.index)}
+                  onKeyDown={(e) => { if (e.key === "Enter") setEditItem(editItem === it.index ? null : it.index); }}>
                   <div className="truncate text-[14px] font-medium">{it.description || "Product"}</div>
                   <div className="text-[12.5px] text-muted">
                     {[it.qty != null && `${it.qty.toLocaleString()} units`, it.unit_price != null && `£${it.unit_price}`, it.cartons != null && `${it.cartons} boxes`, it.hs_code && `HS ${it.hs_code}`].filter(Boolean).join(" · ") || "Details needed"}
                   </div>
                   {it.missing.length > 0 && <div className="mt-1 text-[12px] text-warn">{it.missing.length} detail{it.missing.length > 1 ? "s" : ""} still needed</div>}
                 </div>
-                <button aria-label="Edit product" onClick={() => setEditItem(editItem === it.index ? null : it.index)} className="press grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-white/[0.06] hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                <button aria-label="Remove product" disabled={ctx.pending} onClick={() => ctx.send({ type: "remove_item", index: it.index })} className="press grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-bad/10 hover:text-bad"><Trash2 className="h-3.5 w-3.5" /></button>
+                <button aria-label="Edit product" onClick={() => setEditItem(editItem === it.index ? null : it.index)} className="tile grid h-9 w-9 place-items-center rounded-xl border border-white/8 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+                <button aria-label="Remove product" disabled={ctx.pending} onClick={() => ctx.send({ type: "remove_item", index: it.index })} className="tile grid h-9 w-9 place-items-center rounded-xl border border-white/8 text-muted hover:text-bad"><Trash2 className="h-3.5 w-3.5" /></button>
               </div>
               <AnimatePresence>
                 {editItem === it.index && (
@@ -154,9 +158,10 @@ export function LiveCard({ chat, ctx }: { chat: ChatView; ctx: AskCtx }) {
           <div className="mb-2 text-[13px] font-medium">Live checks</div>
           <div className="grid grid-cols-2 gap-1.5">
             {r.rules.map((x) => (
-              <div key={x.id} title={x.id} className="flex items-center gap-1.5 rounded-xl border border-white/6 bg-white/[0.02] px-2 py-1.5 text-[12px]">
+              <button key={x.id} title={`${x.id}: ${x.why}`} onClick={() => { if (!focusEl(`f-${x.id}`)) focusEl("checks-grid"); }}
+                className="tile flex min-h-[36px] items-center gap-1.5 rounded-xl border border-white/6 bg-white/[0.02] px-2 py-1.5 text-[12px]">
                 {ruleIcon[x.state]}<span className={cn("truncate", x.state === "Pass" ? "text-fg/80" : x.state === "Data" ? "text-faint" : "text-fg")}>{x.name}</span>
-              </div>
+              </button>
             ))}
           </div>
           {pick && (

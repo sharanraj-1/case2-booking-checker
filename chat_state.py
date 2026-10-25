@@ -16,6 +16,7 @@ import re
 from typing import Any
 
 import engine
+import geo
 from engine import FIELD_LABELS, is_blank, parse_number
 
 BOOKING_KEYS = ["seller", "origin_city", "origin_country", "dest_city", "dest_country", "dest_type",
@@ -111,16 +112,30 @@ def validate_booking_field(field: str, raw: Any, booking: dict) -> tuple[Any, st
     if field == "origin_city":
         c = engine.canon_origin_city(s)
         if c is None:
+            near = geo.nearest_served(s, origin=True)
+            if near and near["place_country"] == engine.ORIGIN_COUNTRY:
+                return None, (f"We don't collect from {near['place']}. The closest collection city is {near['city']}, "
+                              f"about {near['km']} km away. Use {near['city']}, or choose another: "
+                              f"{', '.join(engine.ORIGIN_CITIES)}.")
             return None, f"We don't collect from {s}. We collect from {', '.join(engine.ORIGIN_CITIES)}. Which is closest?"
         return c, None
     if field == "dest_country":
         c = engine.canon_country(s)
         if c not in engine.DEST_CITIES:
-            return None, f"We don't deliver to {s}. We go to Germany, France or the Netherlands."
+            near = geo.nearest_countries(s)
+            hint = f" The closest we deliver to is {' or '.join('the Netherlands' if n == 'Netherlands' else n for n in near)}." if near else ""
+            return None, f"We don't deliver to {s}.{hint} We go to Germany, France or the Netherlands."
         return c, None
     if field == "dest_city":
         c = engine.canon_dest_city(s)
         if c is None:
+            near = geo.nearest_served(s)
+            if near and near["place_country"] in engine.DEST_CITIES:
+                return None, (f"We don't deliver to {near['place']}. The closest city we serve is {near['city']}, "
+                              f"about {near['km']} km away. Use {near['city']}, or pick another city in {near['place_country']}.")
+            if near:
+                return None, (f"{near['place']} is in {near['place_country']}, which we don't deliver to. The closest city "
+                              f"we serve is {near['city']} ({near['country']}), about {near['km']} km away.")
             return None, f"We don't deliver to {s}. " + _city_options()
         return c, None
     if field == "dest_type":
@@ -229,6 +244,16 @@ def apply_patch(state: dict, patch: dict, derive: bool = True) -> tuple[dict, li
         city, cp = validate_booking_field("dest_city", city_raw, b) if city_raw is not None else (None, None)
         ctry, kp = validate_booking_field("dest_country", ctry_raw, b) if ctry_raw is not None else (None, None)
         problems += [p for p in (cp, kp) if p]
+        if cp:  # a place we don't serve: remember the closest one we do, and its country if that's served
+            near = geo.nearest_served(str(city_raw))
+            if near:
+                st.setdefault("suggest", {})["dest_city"] = {"value": near["city"], "near": near["place"], "km": near["km"]}
+                if not ctry and not b.get("dest_country") and near["place_country"] in engine.DEST_CITIES:
+                    ctry = near["place_country"]
+        if kp:
+            near_c = geo.nearest_countries(str(ctry_raw))
+            if near_c:
+                st.setdefault("suggest", {})["dest_country"] = {"value": near_c[0], "near": str(ctry_raw), "km": None}
         if city and ctry and engine.country_for_city(city) != ctry:
             problems.append(f"{city} is in {engine.country_for_city(city)}, not {ctry}. Did you mean {city}, "
                             f"{engine.country_for_city(city)}, or a city in {ctry} "
@@ -248,6 +273,10 @@ def apply_patch(state: dict, patch: dict, derive: bool = True) -> tuple[dict, li
         val, prob = validate_booking_field(field, raw, b)
         if prob:
             problems.append(prob)
+            if field == "origin_city":
+                near = geo.nearest_served(str(raw), origin=True)
+                if near:
+                    st.setdefault("suggest", {})["origin_city"] = {"value": near["city"], "near": near["place"], "km": near["km"]}
         elif val is not None:
             _set(b, field, val, changes)
             if field == "ready_date":

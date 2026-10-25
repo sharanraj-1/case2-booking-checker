@@ -134,7 +134,7 @@ export function BookView({ chat, ctx, ai, pendingText, started, onStart, onFile,
             <div ref={listRef} className="scroll-thin max-h-[56vh] min-h-[260px] space-y-3.5 overflow-y-auto px-4 py-5 sm:px-5">
               {chat.messages.map((m, i) => <Bubble key={i} m={m} i={i} />)}
               {pendingText && <Bubble m={{ role: "user", text: pendingText }} i={0} />}
-              <AnimatePresence>{ctx.pending && <Typing />}</AnimatePresence>
+              <AnimatePresence>{ctx.pending && ["say", "answer", "item", "edit", "remove_item", "fix"].includes(ctx.pendingType ?? "") && <Typing />}</AnimatePresence>
             </div>
             <div className="space-y-3 border-t border-white/8 p-4 sm:p-5">
               <AnimatePresence mode="wait">
@@ -170,6 +170,7 @@ export function BookView({ chat, ctx, ai, pendingText, started, onStart, onFile,
                 <p className="mt-1 text-[14.5px] text-muted">Everything below updates the moment you change something above.</p>
               </div>
               <Results r={chat.result} onFix={(a) => ctx.send({ type: "fix", scope: "chat", action: a })} pending={ctx.pending}
+                onEvent={ctx.send} scope="chat" pendingType={ctx.pendingType}
                 showConfirmation={chat.confirmed} confirmed={chat.confirmed} />
               {!chat.confirmed && (
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.6, ease: EASE }}

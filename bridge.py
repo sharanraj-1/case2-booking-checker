@@ -17,6 +17,8 @@ from typing import Any, Callable
 
 import chat_state
 import engine
+import knowledge
+import live_rates
 from engine import FIELD_LABELS, format_date, kg, money, num
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -74,6 +76,19 @@ def _opt(value: str, hint: str = "", icon: str = "") -> dict:
 
 
 def next_ask(state: dict) -> dict | None:
+    """The next question, with the closest valid option first when the seller named a place we don't serve."""
+    ask = _next_ask(state)
+    sug = (state.get("suggest") or {}).get(ask["field"]) if ask else None
+    if ask and sug and ask.get("options"):
+        opts = ask["options"]
+        hit = next((o for o in opts if o["value"] == sug["value"]), None)
+        if hit:
+            near = f"Closest to {sug['near']}" + (f" · {sug['km']} km" if sug.get("km") else "")
+            ask["options"] = [{**hit, "hint": near, "suggested": True}] + [o for o in opts if o is not hit]
+    return ask
+
+
+def _next_ask(state: dict) -> dict | None:
     b = state["booking"]
     for key in chat_state.missing_fields(state):
         if key == "dest_country":
@@ -139,7 +154,8 @@ def _check_chat(chat: dict, review: Callable | None, today: date) -> engine.Book
 
 
 def _commit(sess: dict, new_state: dict, changes: list[str], problems: list[str], user_text: str | None,
-            review: Callable | None, today: date, hint: str = "", quiet_if_nothing: bool = False) -> None:
+            review: Callable | None, today: date, hint: str = "", quiet_if_nothing: bool = False,
+            answer: str = "", note: str = "") -> None:
     chat = sess["chat"]
     was_complete = chat_state.is_complete(chat["state"])
     old = _check_chat(chat, review, today) if (chat["state"]["items"] or chat["turns"]) else None
@@ -162,6 +178,10 @@ def _commit(sess: dict, new_state: dict, changes: list[str], problems: list[str]
         text = " ".join(p for p in [lead, " ".join(problems), ask or (done if not problems else "")] if p)
     if any("calculated" in c for c in changes):
         text += " (I worked out the box count and declared value from your products.)"
+    if note:
+        text = f"{note} {text}"
+    if answer:
+        text = f"{answer}\n\n{text}"
     msg = {"role": "assistant", "text": text}
     # Chips only for real changes to something already known, with what they did to the checks.
     edits = [c for c in changes if "→" in c or c.startswith(("Removed item", "Added item")) and len(new_state["items"]) > 1]
@@ -185,13 +205,14 @@ def _direct_patch(state: dict, text: str) -> dict | None:
 
 
 def handle_event(sess: dict, ev: dict, *, extractor: Callable | None = None, review: Callable | None = None,
-                 today: date | None = None) -> dict:
+                 today: date | None = None, fetch_live: Callable | None = None) -> dict:
     """Apply one UI event to the session (in place) and return it."""
     today = today or engine.today_london()
     if not isinstance(ev, dict) or ev.get("id") == sess.get("last_id"):
         return sess
     sess["last_id"] = ev.get("id")
     sess["flash"] = None
+    sess["download"] = None
     kind = ev.get("type")
     chat = sess["chat"]
     st = chat["state"]
@@ -200,17 +221,38 @@ def handle_event(sess: dict, ev: dict, *, extractor: Callable | None = None, rev
         text = str(ev.get("text") or "").strip()[:2000]
         if not text:
             return sess
+        steer = _ask_text(next_ask(st)) or "Tap any detail of your booking to change it."
         patch = extractor(text, st, chat["last_question"]) if extractor else None
-        if patch is None:
+        if patch is None:  # no AI (or it's down): approved answers by keyword, else treat as an answer
+            topic = knowledge.match_topic(text)
+            if topic:
+                chat["messages"] += [{"role": "user", "text": text},
+                                     {"role": "assistant", "text": f"{knowledge.TOPICS[topic]['a']}\n\n{steer}"}]
+                return sess
             patch = _direct_patch(st, text)
             if patch is None:
                 chat["messages"] += [{"role": "user", "text": text}, {"role": "assistant", "text": (
-                    "Sorry, I couldn't reach the assistant just now. " if extractor else "") +
-                    (_ask_text(next_ask(st)) or "Everything's in. Tap any detail on the right to change it, "
-                                                "or use the buttons on the result cards.")}]
+                    "Sorry, I couldn't reach the assistant just now. " if extractor else "") + steer}]
                 return sess
+        intent, topic = patch.get("intent", "booking"), patch.get("topic")
+        answer = knowledge.TOPICS[topic]["a"] if topic in knowledge.TOPICS else ""
+        has_updates = bool(patch.get("booking_updates") or patch.get("item_updates"))
+        # Guardrails: the seller only ever sees curated text or our own questions.
+        if intent == "off_topic":
+            chat["messages"] += [{"role": "user", "text": text},
+                                 {"role": "assistant", "text": f"{knowledge.OFF_TOPIC_REPLY}\n\n{steer}"}]
+            return sess
+        if not has_updates and intent in ("question", "greeting"):
+            lead = answer or ("Hi! " if intent == "greeting" else
+                              "I don't have a checked answer for that, so I won't guess. I can help with your booking "
+                              "and its customs paperwork.")
+            chat["messages"] += [{"role": "user", "text": text}, {"role": "assistant", "text": f"{lead}\n\n{steer}"}]
+            return sess
+        dropped = patch.get("dropped") or []
+        note = (f"I couldn't find the {', '.join(dict.fromkeys(dropped))} in your message, so I didn't fill "
+                f"{'it' if len(set(dropped)) == 1 else 'them'} in." if dropped else "")
         new, changes, problems = chat_state.apply_patch(st, patch)
-        _commit(sess, new, changes, problems, text, review, today, patch.get("reply_hint", ""))
+        _commit(sess, new, changes, problems, text, review, today, answer=answer, note=note)
     elif kind in ("answer", "edit"):
         field, value = ev.get("field"), ev.get("value")
         if field not in chat_state.BOOKING_KEYS:
@@ -263,8 +305,67 @@ def handle_event(sess: dict, ev: dict, *, extractor: Callable | None = None, rev
         sess["file"]["edits"].pop(ev.get("booking_id"), None)
     elif kind == "file_clear":
         sess["file"] = None
+    elif kind == "live_rates":
+        _live_event(sess, ev, review, today, fetch_live or live_rates.quote)
+    elif kind == "invoice":
+        _invoice_event(sess, ev, review, today)
     return sess
 
+
+
+# ---------------------------------------------------------------------------
+# Live prices (advisory) and downloads
+# ---------------------------------------------------------------------------
+
+
+def live_signature(res: engine.BookingResult) -> list:
+    b = res.booking
+    return [b.get("origin_city"), b.get("dest_country"), b.get("dest_city"), b.get("pallets"), b.get("gross_kg")]
+
+
+def _live_view(res: engine.BookingResult, live: dict | None) -> dict | None:
+    """Live quotes only while the route and load are the ones they were fetched for."""
+    if not live or live.get("sig") != live_signature(res):
+        return None
+    out = {k: v for k, v in live.items() if k != "sig"}
+    ours = res.total_cost
+    if out.get("ok") and ours is not None:
+        cheapest = out["quotes"][0]["price"]
+        out["ours"] = {"carrier": res.recommendation, "cost": ours, "cost_label": money(ours)}
+        out["summary"] = (f"Cheapest live price: {money(cheapest)} ({out['quotes'][0]['service']}). "
+                          f"Our fixed-rate pick, {res.recommendation}, is {money(ours)}"
+                          + (f", {money(abs(ours - cheapest))} {'more' if ours > cheapest else 'less'}." if ours != cheapest else "."))
+    return out
+
+
+def _result_for(sess: dict, scope: str, booking_id: str | None, review: Callable | None, today: date):
+    if scope == "file" and sess.get("file"):
+        return next((r for r in file_results(sess, review, today) if r.booking_id == booking_id), None)
+    if sess["chat"]["state"]["items"] or sess["chat"]["turns"]:
+        return _check_chat(sess["chat"], review, today)
+    return None
+
+
+def _live_event(sess: dict, ev: dict, review: Callable | None, today: date, fetch: Callable) -> None:
+    res = _result_for(sess, ev.get("scope", "chat"), ev.get("booking_id"), review, today)
+    if res is None:
+        return
+    b = res.booking
+    try:
+        data = fetch(b.get("origin_city"), b.get("dest_country"), b.get("dest_city"), int(b.get("pallets") or 0),
+                     float(b.get("gross_kg") or 0))
+    except Exception:
+        data = {"ok": False, "error": "Live prices aren't available right now.", "quotes": []}
+    sess.setdefault("live", {})[res.booking_id] = {**data, "sig": live_signature(res)}
+
+
+def _invoice_event(sess: dict, ev: dict, review: Callable | None, today: date) -> None:
+    from ui import export
+    res = _result_for(sess, ev.get("scope", "chat"), ev.get("booking_id"), review, today)
+    if res is None:
+        return
+    name = f"commercial-invoice-draft-{'booking' if res.booking_id.startswith('CHAT') else res.booking_id}.xlsx"
+    sess["download"] = {"id": ev.get("id"), "name": name, "b64": base64.b64encode(export.invoice_xlsx(res)).decode()}
 
 # ---------------------------------------------------------------------------
 # File mode
@@ -364,7 +465,7 @@ def status_view(res: engine.BookingResult) -> dict:
             "sub": "Nothing to fix. You can book this as it is."}
 
 
-def serialise(res: engine.BookingResult) -> dict:
+def serialise(res: engine.BookingResult, live: dict | None = None) -> dict:
     b = res.booking
     findings = []
     for f in res.findings:
@@ -435,7 +536,7 @@ def serialise(res: engine.BookingResult) -> dict:
         "id": res.booking_id, "status": res.status, "view": status_view(res),
         "counts": {"red": res.red_count, "data": res.data_count, "amber": res.amber_count,
                    "advisory": res.count("Advisory"), "passed": len(res.rules_passed)},
-        "rules": [{"id": r, "name": PLAIN_RULE[r], "state": s} for r, s in res.rule_status.items()],
+        "rules": [{"id": r, "name": PLAIN_RULE[r], "state": s, "why": engine.RULES[r]["why"]} for r, s in res.rule_status.items()],
         "findings": findings, "options": options, "recommendation": res.recommendation, "reason": res.reason,
         "why_others": res.why_others_lost,
         "load": {"gross": kg(b.get("gross_kg")) if b.get("gross_kg") else None,
@@ -444,6 +545,10 @@ def serialise(res: engine.BookingResult) -> dict:
                  "priority": b.get("priority") if b.get("priority") in engine.PRIORITIES else "Balanced"},
         "confirmation": confirmation, "next_steps": steps,
         "notices": [n["message"] for n in res.notices],
+        "invoice": knowledge.invoice_checklist(res),
+        "country": knowledge.country_rules(res),
+        "live": _live_view(res, live),
+        "can_live": bool(b.get("dest_country") in engine.DEST_CITIES and b.get("pallets") and b.get("gross_kg")),
     }
 
 
@@ -495,7 +600,7 @@ def chat_view(sess: dict, review: Callable | None, today: date) -> dict:
                   for i, it in enumerate(state["items"])],
         "progress": {"done": max(0, total - left), "total": total},
         "complete": complete, "confirmed": bool(state.get("confirmed")),
-        "result": serialise(res) if res is not None else None,
+        "result": serialise(res, (sess.get("live") or {}).get(res.booking_id)) if res is not None else None,
     }
 
 
@@ -513,13 +618,15 @@ def file_view(sess: dict, review: Callable | None, today: date) -> dict | None:
              "eta": format_date(r.eta) if r.eta else "—", "edited": r.booking_id in data["edits"]} for r in results]
     xlsx = base64.b64encode(export.to_xlsx(results)).decode() if results else None
     return {"label": data["label"], "notices": data["notices"], "counts": {"total": len(results), **counts},
-            "rows": rows, "results": {r.booking_id: serialise(r) for r in results}, "xlsx": xlsx}
+            "rows": rows, "results": {r.booking_id: serialise(r, (sess.get("live") or {}).get(r.booking_id)) for r in results},
+            "xlsx": xlsx}
 
 
 def payload(sess: dict, review: Callable | None = None, today: date | None = None) -> dict:
     today = today or engine.today_london()
     return {
         "ack": sess.get("last_id"), "ai": bool(sess.get("ai_on")), "today": format_date(today),
+        "download": sess.get("download"),
         "flash": sess.get("flash"), "chat": chat_view(sess, review, today), "file": file_view(sess, review, today),
         "coo_options": engine.COO_ALLOWED, "item_fields": {k: list(v) for k, v in ITEM_FIELD_INFO.items()},
         "tariff_link": TARIFF_LOOKUP,

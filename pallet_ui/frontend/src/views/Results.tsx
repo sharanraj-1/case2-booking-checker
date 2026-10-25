@@ -3,8 +3,9 @@ import { motion } from "framer-motion";
 import { AlertTriangle, ArrowRight, BadgeCheck, Bot, CalendarClock, Check, ChevronDown, CircleDashed, ExternalLink, Info, Scale, ShieldCheck, Sparkles, Timer, Truck, Wand2, X, XCircle } from "lucide-react";
 import { useState } from "react";
 import { Button, Pill, Reveal, TiltCard } from "../components/fx";
-import { boldSegments, cn, EASE, niceDate } from "../lib/cn";
-import type { CarrierOption, Finding, Result, Severity, Tone } from "../types";
+import { boldSegments, cn, EASE, focusEl, niceDate } from "../lib/cn";
+import type { CarrierOption, Finding, Result, Send, Severity, Tone } from "../types";
+import { CountryRules, InvoiceChecklist, LivePrices } from "./Extras";
 
 const TONE_TEXT: Record<Tone, string> = { red: "text-gradient-red", amber: "text-gradient-amber", green: "text-gradient-green" };
 const TONE_RING: Record<Tone, string> = { red: "#f87171", amber: "#fbbf24", green: "#34d399" };
@@ -53,10 +54,12 @@ function StatusCard({ r }: { r: Result }) {
           <div className="mt-2 text-[16px] font-medium text-fg">{r.view.headline}</div>
           <div className="mt-1 text-[14px] text-muted">{r.view.sub}</div>
           <div className="mt-4 flex flex-wrap gap-2">
-            {r.counts.red > 0 && <Pill tone="red">{r.counts.red} must fix</Pill>}
-            {r.counts.data > 0 && <Pill tone="violet">{r.counts.data} missing info</Pill>}
-            {r.counts.amber > 0 && <Pill tone="amber">{r.counts.amber} to sort</Pill>}
-            {r.counts.advisory > 0 && <Pill tone="gray">{r.counts.advisory} advisory</Pill>}
+            {([["Red", r.counts.red, "red", "must fix"], ["Data", r.counts.data, "violet", "missing info"],
+               ["Amber", r.counts.amber, "amber", "to sort"], ["Advisory", r.counts.advisory, "gray", "advisory"]] as const)
+              .filter(([, n]) => n > 0).map(([sev, n, tone, word]) => (
+                <button key={sev} onClick={() => focusEl(`grp-${sev}`)} className="tile rounded-full" title="Show these">
+                  <Pill tone={tone}>{n} {word} <ArrowRight className="h-3 w-3" /></Pill>
+                </button>))}
           </div>
         </div>
         <CheckRing passed={r.counts.passed} tone={r.view.tone} />
@@ -95,12 +98,12 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function FindingCard({ f, onFix, pending, i }: { f: Finding; onFix?: (a: Record<string, unknown>) => void; pending?: boolean; i: number }) {
+function FindingCard({ f, onFix, pending, i, anchor }: { f: Finding; onFix?: (a: Record<string, unknown>) => void; pending?: boolean; i: number; anchor?: string }) {
   const [why, setWhy] = useState(false);
   const accent = { Red: "bg-bad", Data: "bg-violet", Amber: "bg-warn", Advisory: "bg-faint" }[f.severity];
   return (
     <Reveal i={i}>
-      <div className="glass relative overflow-hidden rounded-2xl p-4 pl-5 sm:p-5 sm:pl-6">
+      <div id={anchor} className="glass relative scroll-mt-28 overflow-hidden rounded-2xl p-4 pl-5 sm:p-5 sm:pl-6">
         <span className={cn("absolute bottom-3 left-0 top-3 w-[3px] rounded-r-full", accent)} />
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[15px] font-semibold tracking-[-0.01em]">{f.title}</span>
@@ -142,18 +145,20 @@ function Findings({ r, onFix, pending }: { r: Result; onFix?: (a: Record<string,
     );
   }
   let n = 0;
+  const seen = new Set<string>();
+  const anchorFor = (f: Finding) => (seen.has(f.rule) ? undefined : (seen.add(f.rule), `f-${f.rule}`));
   return (
     <div className="space-y-6">
       {GROUPS.map((g) => {
         const list = r.findings.filter((f) => f.severity === g.sev);
         if (!list.length) return null;
         return (
-          <div key={g.sev}>
+          <div key={g.sev} id={`grp-${g.sev}`} className="scroll-mt-28 rounded-2xl">
             <div className="mb-3 flex items-baseline gap-2.5">
               <Pill tone={g.tone}>{g.title} · {list.length}</Pill>
               <span className="text-[13px] text-faint">{g.sub}</span>
             </div>
-            <div className="space-y-3">{list.map((f) => <FindingCard key={n} f={f} onFix={onFix} pending={pending} i={n++} />)}</div>
+            <div className="space-y-3">{list.map((f) => <FindingCard key={n} f={f} onFix={onFix} pending={pending} i={n++} anchor={anchorFor(f)} />)}</div>
           </div>
         );
       })}
@@ -162,26 +167,42 @@ function Findings({ r, onFix, pending }: { r: Result; onFix?: (a: Record<string,
 }
 
 function ChecksGrid({ r }: { r: Result }) {
+  const [open, setOpen] = useState<string | null>(null);
   const icon = { Pass: <Check className="h-3.5 w-3.5 text-good" />, Red: <X className="h-3.5 w-3.5 text-bad" />, Amber: <AlertTriangle className="h-3.5 w-3.5 text-warn" />, Data: <CircleDashed className="h-3.5 w-3.5 text-violet" /> };
+  const tap = (id: string, state: string) => { if (!(state !== "Pass" && focusEl(`f-${id}`))) setOpen(open === id ? null : id); };
+  const cur = r.rules.find((x) => x.id === open);
   return (
-    <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
-      {r.rules.map((x, i) => (
-        <Reveal key={x.id} i={i}>
-          <div className={cn("flex h-full items-start gap-2.5 rounded-2xl border p-3",
-            x.state === "Pass" ? "border-white/8 bg-white/[0.025]" : x.state === "Red" ? "border-bad/25 bg-bad/[0.06]" : x.state === "Amber" ? "border-warn/25 bg-warn/[0.06]" : "border-violet/25 bg-violet/[0.06]")}>
-            <span className="mt-0.5">{icon[x.state]}</span>
-            <div><div className="font-mono text-[10.5px] text-faint">{x.id}</div><div className="text-[13px] leading-snug text-fg/90">{x.name}</div></div>
-          </div>
-        </Reveal>
-      ))}
+    <div>
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+        {r.rules.map((x, i) => (
+          <Reveal key={x.id} i={i}>
+            <button onClick={() => tap(x.id, x.state)} title={x.state === "Pass" ? "Why this check matters" : "Show the problem"}
+              className={cn("tile flex h-full w-full items-start gap-2.5 rounded-2xl border p-3",
+                x.state === "Pass" ? "border-white/8 bg-white/[0.025]" : x.state === "Red" ? "border-bad/25 bg-bad/[0.06]" : x.state === "Amber" ? "border-warn/25 bg-warn/[0.06]" : "border-violet/25 bg-violet/[0.06]",
+                open === x.id && "border-violet/50")}>
+              <span className="mt-0.5">{icon[x.state]}</span>
+              <span className="min-w-0 flex-1"><span className="block font-mono text-[10.5px] text-faint">{x.id}</span><span className="block text-[13px] leading-snug text-fg/90">{x.name}</span></span>
+              <ChevronDown className={cn("mt-0.5 h-3.5 w-3.5 shrink-0 text-faint transition-transform", x.state !== "Pass" && "-rotate-90", open === x.id && "rotate-180")} />
+            </button>
+          </Reveal>
+        ))}
+      </div>
+      {cur && (
+        <motion.p key={cur.id} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="mt-3 rounded-2xl border border-white/8 bg-white/[0.03] p-3.5 text-[13.5px] leading-relaxed text-muted">
+          <span className="font-medium text-fg">{cur.id} · {cur.name}: </span>{cur.why}
+        </motion.p>
+      )}
     </div>
   );
 }
 
-function CarrierCard({ o, i }: { o: CarrierOption; i: number }) {
+function CarrierCard({ o, i, why }: { o: CarrierOption; i: number; why: string }) {
+  const [open, setOpen] = useState(false);
   return (
     <Reveal i={i} className="h-full">
       <TiltCard glow={o.picked} className={cn("p-5", o.eligible === false && "opacity-75")}>
+        <button onClick={() => setOpen(!open)} className="absolute inset-0 z-10 cursor-pointer rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet/70"
+          aria-label={`${open ? "Hide" : "Show"} why ${o.picked ? "we picked" : "we did not pick"} ${o.carrier}`} />
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className={cn("grid h-9 w-9 place-items-center rounded-xl border", o.picked ? "border-cyan/40 bg-cyan/10" : "border-white/10 bg-white/[0.04]")}><Truck className={cn("h-4.5 w-4.5", o.picked ? "text-cyan" : "text-muted")} /></div>
@@ -203,6 +224,8 @@ function CarrierCard({ o, i }: { o: CarrierOption; i: number }) {
           <div className="flex items-center justify-between"><span className="flex items-center gap-1.5 text-muted"><Scale className="h-3.5 w-3.5" /> Max per pallet</span><span>{o.max_kg} kg</span></div>
         </div>
         {o.excluded && <p className="mt-3 rounded-xl border border-bad/20 bg-bad/[0.07] p-2.5 text-[12.5px] text-red-100/90">{o.excluded}</p>}
+        <div className="mt-3 flex items-center gap-1 text-[12.5px] text-cyan">{open ? "Hide" : o.picked ? "Why we picked it" : "Why not this one"} <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} /></div>
+        {open && why && <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mt-2 text-[13px] leading-relaxed text-fg/85">{why}</motion.p>}
       </TiltCard>
     </Reveal>
   );
@@ -218,7 +241,8 @@ function Carriers({ r }: { r: Result }) {
         {r.load.per_pallet && <span>= <span className="text-fg">{r.load.per_pallet} per pallet</span></span>}
         <span>Priority <span className="text-fg">{r.load.priority}</span></span>
       </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">{r.options.map((o, i) => <CarrierCard key={o.carrier} o={o} i={i} />)}</div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">{r.options.map((o, i) => (
+        <CarrierCard key={o.carrier} o={o} i={i} why={o.picked ? r.reason : (r.why_others.find((w) => w.startsWith(o.carrier)) ?? o.excluded ?? "")} />))}</div>
       {r.why_others.length > 0 && (
         <div className="mt-4 rounded-2xl border border-white/8 bg-white/[0.025] p-4">
           <div className="mb-2 text-[13px] font-medium text-fg">Why not the others</div>
@@ -295,9 +319,11 @@ function Section({ title, sub, children, i = 0 }: { title: string; sub?: string;
   );
 }
 
-export function Results({ r, onFix, pending, showConfirmation = true, confirmed = false }: {
+export function Results({ r, onFix, pending, showConfirmation = true, confirmed = false, onEvent, scope = "chat", pendingType }: {
   r: Result; onFix?: (a: Record<string, unknown>) => void; pending?: boolean; showConfirmation?: boolean; confirmed?: boolean;
+  onEvent?: Send; scope?: "chat" | "file"; pendingType?: string | null;
 }) {
+  const target = { scope, booking_id: r.id };
   return (
     <div className="space-y-10">
       {r.notices.length > 0 && <div className="rounded-2xl border border-cyan/20 bg-cyan/[0.06] p-3.5 text-[13.5px] text-cyan-100">{r.notices.join(" ")}</div>}
@@ -308,11 +334,20 @@ export function Results({ r, onFix, pending, showConfirmation = true, confirmed 
       <Section title="What we found" sub="Each problem says what's wrong and exactly how to fix it.">
         <Findings r={r} onFix={onFix} pending={pending} />
       </Section>
-      <Section title="The 10 checks" sub="Green means passed.">
-        <ChecksGrid r={r} />
+      <Section title="The 10 checks" sub="Green means passed. Tap a check to see the problem or why it matters.">
+        <div id="checks-grid" className="scroll-mt-28 rounded-2xl"><ChecksGrid r={r} /></div>
       </Section>
-      <Section title="Carriers compared" sub="All three options on this route. The weight per pallet decides who can take it; your priority picks the winner.">
+      <Section title="Carriers compared" sub="All three options on this route. Tap a card to see why it was or wasn't picked.">
         <Carriers r={r} />
+      </Section>
+      <Section title="Compare with the market" sub="Optional: real prices from other carriers right now.">
+        <LivePrices r={r} loading={pendingType === "live_rates"} onFetch={onEvent ? () => onEvent({ type: "live_rates", ...target }) : undefined} />
+      </Section>
+      <Section title="Paperwork" sub="What the commercial invoice needs, and the rules on each side of the border.">
+        <div className="space-y-4">
+          <InvoiceChecklist r={r} loading={pendingType === "invoice"} onDownload={onEvent ? () => onEvent({ type: "invoice", ...target }) : undefined} />
+          <CountryRules r={r} />
+        </div>
       </Section>
       {showConfirmation && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
