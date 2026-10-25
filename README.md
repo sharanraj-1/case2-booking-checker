@@ -16,6 +16,10 @@ Statuses are in plain words: **Good to go** (Ready), **OK to ship** (Ready with 
 
 ## Run locally
 
+On Windows, the quickest way: `powershell -ExecutionPolicy Bypass -File run.ps1` (creates the venv the first time), then open http://localhost:8501. **Keep that window open**: the page needs the server running, and shows "Can't reach the app" if it stops.
+
+Or by hand:
+
 ```bash
 python -m venv .venv
 .venv/Scripts/activate          # Windows; use `source .venv/bin/activate` on macOS/Linux

@@ -12,6 +12,20 @@ import { downloadB64, FileView } from "./views/FileView";
 
 interface Pending { id: string; type: string; label?: string }
 
+/** The component is served by the Streamlit server; its health endpoint sits beside /component/. */
+async function serverAlive(): Promise<boolean> {
+  const base = window.location.href.split("/component/")[0];
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 4000);
+    const r = await fetch(`${base}/_stcore/health`, { cache: "no-store", signal: ctrl.signal });
+    clearTimeout(t);
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 export default function App() {
   const [p, setP] = useState<Payload | null>(null);
   const [tab, setTab] = useState<Tab>("book");
@@ -25,10 +39,13 @@ export default function App() {
   const pendingRef = useRef<Pending | null>(null);
   pendingRef.current = pending;
 
+  const [offline, setOffline] = useState(false);
+
   useEffect(() => {
     const off = connect((args) => {
       const next = args.payload as Payload;
       setP(next);
+      setOffline(false);
       if (pendingRef.current && next.ack === pendingRef.current.id) setPending(null);
       if (next.flash) setToast(next.flash);
     });
@@ -53,6 +70,15 @@ export default function App() {
     if (["sample", "upload"].includes(ev.type)) setTab("file");
     if (["say", "answer", "item"].includes(ev.type)) setStartedLocal(true);
     setValue({ ...ev, id });
+    // If the Python server has stopped, say so instead of waiting silently.
+    serverAlive().then((ok) => {
+      if (!ok && pendingRef.current?.id === id) { setPending(null); setOffline(true); }
+    });
+  }, []);
+
+  useEffect(() => {  // also notice a stopped server while idle
+    const t = setInterval(() => serverAlive().then((ok) => setOffline(!ok)), 15000);
+    return () => clearInterval(t);
   }, []);
 
   const goBook = useCallback(() => {
@@ -125,6 +151,21 @@ export default function App() {
         </footer>
       </main>
       <CommandPalette open={palette} setOpen={setPalette} actions={actions} />
+      <AnimatePresence>
+        {offline && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="fixed inset-x-0 bottom-5 z-[95] flex justify-center px-4">
+            <div role="alert" className="glass-strong flex max-w-[620px] flex-wrap items-center gap-3 rounded-2xl border-bad/40 px-5 py-4 text-[14px]">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-bad shadow-[0_0_12px_#f87171]" />
+              <span className="min-w-0 flex-1">
+                <span className="font-semibold text-white">Can't reach the app.</span>{" "}
+                <span className="text-muted">The server has stopped or the connection dropped. Start it again with <code className="font-mono text-fg">streamlit run app.py</code>, then reload.</span>
+              </span>
+              <button onClick={() => { try { window.parent.location.reload(); } catch { window.location.reload(); } }}
+                className="press rounded-xl bg-white/10 px-3.5 py-2 text-[13px] font-medium hover:bg-white/15">Reload page</button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {toast && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="fixed inset-x-0 bottom-5 z-[90] flex justify-center px-4">
