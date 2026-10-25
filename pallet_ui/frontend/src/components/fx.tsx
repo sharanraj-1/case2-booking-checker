@@ -15,8 +15,8 @@ export function Ambient() {
   );
 }
 
-export function ScrollProgress() {
-  const { scrollYProgress } = useScroll();
+export function ScrollProgress({ container }: { container: React.RefObject<HTMLElement> }) {
+  const { scrollYProgress } = useScroll({ container });
   const x = useSpring(scrollYProgress, { stiffness: 140, damping: 30, mass: 0.3 });
   return (
     <motion.div

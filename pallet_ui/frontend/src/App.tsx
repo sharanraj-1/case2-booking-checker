@@ -35,6 +35,9 @@ export default function App() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  // Streamlit's frame has scrolling="no", so the app scrolls inside its own container.
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const toTop = useCallback(() => scrollerRef.current?.scrollTo({ top: 0, behavior: "smooth" }), []);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingRef = useRef<Pending | null>(null);
   pendingRef.current = pending;
@@ -51,6 +54,7 @@ export default function App() {
     });
     setFrameHeight(window.innerHeight);
     window.focus();
+    setTimeout(() => scrollerRef.current?.focus({ preventScroll: true }), 300);  // arrow keys / PageDown scroll
     return off;
   }, []);
 
@@ -83,10 +87,10 @@ export default function App() {
 
   const goBook = useCallback(() => {
     setTab("book"); setStartedLocal(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    toTop();
     setTimeout(() => composerRef.current?.focus(), 450);
-  }, []);
-  const goFile = useCallback(() => { setTab("file"); window.scrollTo({ top: 0, behavior: "smooth" }); }, []);
+  }, [toTop]);
+  const goFile = useCallback(() => { setTab("file"); toTop(); }, [toTop]);
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
@@ -130,17 +134,17 @@ export default function App() {
     ? (pending.type === "say" || pending.type === "answer" ? pending.label ?? null : null) : null;
 
   return (
-    <div className="relative min-h-screen">
+    <div ref={scrollerRef} tabIndex={-1} className="scroll-thin relative h-[100dvh] overflow-y-auto overflow-x-hidden overscroll-contain outline-none">
       <Ambient />
-      <ScrollProgress />
-      <Nav tab={tab} setTab={(t) => { setTab(t); window.scrollTo({ top: 0, behavior: "smooth" }); }} ai={p.ai} onPalette={() => setPalette(true)} />
+      <ScrollProgress container={scrollerRef} />
+      <Nav tab={tab} setTab={(t) => { setTab(t); toTop(); }} ai={p.ai} onPalette={() => setPalette(true)} />
       <main className="mx-auto max-w-[1180px] px-4 pb-24 sm:px-6">
         <AnimatePresence mode="wait">
           <motion.div key={tab} initial={{ opacity: 0, y: 14, filter: "blur(6px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} exit={{ opacity: 0, y: -10, filter: "blur(6px)" }} transition={{ duration: 0.45, ease: EASE }}>
             {tab === "book" ? (
               <BookView chat={p.chat} ctx={ctx} ai={p.ai} pendingText={pendingText} started={started} composerRef={composerRef}
                 onStart={goBook} onFile={goFile} onConfirm={() => send({ type: "confirm" })}
-                onReset={() => { send({ type: "reset" }); setStartedLocal(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
+                onReset={() => { send({ type: "reset" }); setStartedLocal(false); toTop(); }} />
             ) : (
               <FileView file={p.file} send={send} pending={!!pending && ["sample", "upload", "file_clear"].includes(pending.type)} inputRef={fileInputRef} openId={openId} setOpenId={setOpenId} />
             )}

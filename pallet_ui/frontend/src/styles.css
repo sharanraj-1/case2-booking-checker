@@ -20,6 +20,8 @@
 
 :root { color-scheme: dark; }
 html, body { background: var(--color-ink); color: var(--color-fg); }
+/* The page itself never scrolls (Streamlit frames it with scrolling="no"); App's container does. */
+html, body, #root { height: 100%; overflow: hidden; }
 body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
