@@ -2,15 +2,17 @@
 
 Hackathon submission for **Case 2 – Conversational Shipment Booking & Pre-Flight Error Checker**.
 
-A public Streamlit app that books UK → EU pallet shipments by chat (or a guided form) and checks booking files for paperwork mistakes before they leave. Every booking gets: what's wrong, how serious it is and the exact fix; a carrier recommendation based on the seller's priority, with the reason; and a plain-English confirmation with next steps.
+A public Streamlit app that books UK → EU pallet shipments through a guided conversation (tap-to-answer, or free text with an API key) and checks booking files for paperwork mistakes before they leave. Every booking gets: what's wrong, how serious it is and the exact fix; a carrier recommendation based on the seller's priority, with the reason; and a plain-English confirmation with next steps.
 
 > **We use AI where language is messy and code where accuracy matters.**
 
 ## Try it
 
-- **📄 Check a file** → **Try sample file** loads `test_bookings.xlsx` (18 bookings, one planted mistake per rule, plus edge cases). Click any row to open it.
-- **💬 Book by chat** → describe a shipment in your own words, e.g. *"I need to send some mugs to Germany next week"*. It asks only for what's missing. Change things mid-way (*"make it 4 pallets"*, *"change it to Lyon"*, *"drop the candles"*, *"go with fastest"*) and watch the checks and carrier refresh, with an "Updated: Pallets 3 → 4 · Cost £540 → £720" note.
-- Without an API key, the chat tab becomes a step-by-step form that collects the same fields and runs the same checks.
+- **Book a shipment.** Answer one question at a time. Every question comes with tap-to-answer options (country and city tiles, quick dates, +/− pallets, a simple product card), or you can type. With an API key you can also write freely: *"I need to send some mugs to Germany next week"*, *"make it 4 pallets"*, *"change it to Lyon"*, *"drop the candles"*. The **Your booking** card fills in live; tap any line to change it, and use +/− on pallets. Each change shows chips like `Pallets 3 → 4` `Cost £540.00 → £720.00`.
+- **Check a file.** Drop one .xlsx (Bookings + Items sheets) or two CSVs. You get counts, one card per booking and a slide-over with the full results. "Fix it" applies a numeric fix to an in-app copy (with Undo; your file is never changed), and "Download results" exports an .xlsx. Need a demo? **Try an example** loads `test_bookings.xlsx`.
+- **⌘K / Ctrl+K** opens the command menu (new booking, upload, example file, download, jump to any booking). **/** jumps to the booking chat.
+
+Statuses are in plain words: **Good to go** (Ready), **OK to ship** (Ready with warnings) and **Can't ship yet** (Blocked).
 
 ## Run locally
 
@@ -21,26 +23,36 @@ pip install -r requirements-dev.txt
 streamlit run app.py
 ```
 
-Optional, for the AI chat and the AI R-06 review: put your key in `.streamlit/secrets.toml` (git-ignored):
+The built front end (`pallet_ui/frontend/dist`) is committed, so Node isn't needed to run or deploy. To change the UI:
+
+```bash
+cd pallet_ui/frontend
+npm install
+npm run build                    # then refresh the Streamlit page
+# or live reload: PALLET_UI_DEV=1 streamlit run app.py  +  npm run dev
+```
+
+Optional, for free-text chat and the AI R-06 review: put your key in `.streamlit/secrets.toml` (git-ignored):
 
 ```toml
 ANTHROPIC_API_KEY = "sk-ant-..."
 ```
 
-or set the `ANTHROPIC_API_KEY` environment variable. The model is set in one place: `llm/config.py` (`claude-opus-5-5`, low effort).
+or set the `ANTHROPIC_API_KEY` environment variable. The model is set in one place: `llm/config.py` (`claude-opus-5-5`, low effort). Without a key everything still works through the tap-to-answer questions.
 
 ## Run the tests
 
 ```bash
 python test_engine.py          # engine: 22 tests, including the sample file vs expected results
-pytest                         # everything: engine, chat merge logic, headless UI tests
+pytest                         # everything: engine, chat merge logic, bridge (UI events), app smoke test
 ```
 
 | File | What it covers |
 | --- | --- |
 | `test_engine.py` | Every planted mistake in `test_bookings.xlsx` → expected rule, severity, status, carrier and cost. Also: leading-zero HS codes, 1% R-02 tolerance, R-03 both fixes, R-05 "no carrier fits" with pallets per carrier, 450 kg Fastest → B, Balanced → B on every route, R-06 keywords (and no false positives), DD-MM-YYYY dates, bad values never crashing, CSV loading, duplicates, orphans, AI review merge. |
 | `tests/test_chat_state.py` | Chat merge logic as pure functions: add an item, update a field, relative edits ("+1 pallet"), remove an item by description, change pallets → re-check and diff, "make it Lyon" switches country, "Lyon, Germany" is asked about, synonyms, invalid values (Munich, Glasgow, bad dates), derived totals, apply-fix. |
-| `tests/test_app.py` | Headless Streamlit (`AppTest`): no-key form mode, the sample file opens all 18 bookings without errors, file-mode "Apply this fix", the chat UI with a fake extractor (pallet change diff), and the guided form through to a confirmation. |
+| `tests/test_bridge.py` | The UI's events end to end without a browser: a full no-AI conversation from empty to confirmed, typed answers, invalid answers, +1 pallet with its cost change, add/update/remove products, "Fix it" in chat and in file mode, undo, duplicate events ignored, AI extractor and its failure fallback, broken uploads, every sample booking serialising in plain English. |
+| `tests/test_app_smoke.py` | `app.py` starts with no key; the built front end is present. |
 | `tests/test_chat_scripted.py` | Three real conversations against the API (vague start; missing fields; mid-conversation changes). **Skipped unless `ANTHROPIC_API_KEY` is set.** |
 
 `make_test_file.py` regenerates `test_bookings.xlsx`.
@@ -48,21 +60,25 @@ pytest                         # everything: engine, chat merge logic, headless 
 ## How it's built
 
 ```
-app.py                 page shell: two tabs, header, glossary
+app.py                 Streamlit shell: full-screen React component, session, event callback
+bridge.py              UI events → chat_state / engine; builds the plain-English payload (pure, tested)
 engine.py              rules R-01..R-10, file loader, carrier recommender, ETA  ← single source of truth
-chat_state.py          chat state: validate + merge patches, missing fields, questions, diffs (pure)
+chat_state.py          booking state: validate + merge patches, missing fields, diffs (pure)
 llm/config.py          model constant, key lookup (st.secrets → env)
 llm/prompts.py         the two prompts (extraction, R-06 review)
 llm/client.py          one JSON call: strips ```json fences, parses safely, retries once
 llm/extract.py         chat message → patch
 llm/r06.py             AI second opinion on ambiguous R-06 items (cached by description)
-ui/results.py          the shared results component (both tabs)
-ui/file_tab.py         upload, summary table, export, apply-fix on a copy
-ui/chat_tab.py         chat, confirm, apply-fix
-ui/guided_form.py      no-key step-by-step form (same state, same checks)
-ui/panel.py            live side panel: booking, items, missing fields, live rule grid
 ui/export.py           .xlsx download (Summary, Findings, Carrier options)
+pallet_ui/             the React front end as a Streamlit custom component
+  frontend/src/App.tsx           nav, ⌘K palette, tabs, pending/skeleton state, toasts
+  frontend/src/views/            BookView (chat + live card), Ask (answer controls), FileView, Results (shared bento)
+  frontend/src/components/       fx (glass, tilt, magnetic buttons, reveal, skeletons), Hero3D (three.js), Nav, CommandPalette
 ```
+
+**Why React inside Streamlit:** the brief needs a public Streamlit app, the Python engine as the single source of truth, and the API key kept server-side. A Streamlit custom component gives a full React interface (Tailwind, Framer Motion, cmdk, three.js) while every rule result still comes from Python. Each tap sends a small event (`{"type": "answer", "field": "pallets", "value": "3"}`); `bridge.handle_event` applies it, re-runs the engine, and sends back a payload the UI only renders. While Python works, the UI shows shimmer skeletons, never spinners. Next.js isn't used because it can't run inside Streamlit and would need a second server for the Python rules.
+
+**UX principles:** one question at a time, always with a control that fits it; plain words first and rule IDs second; every problem says what's wrong, why it matters and how to fix it, with a one-tap fix where the fix is a number; nothing is hidden behind jargon (the HS code field links to the GOV.UK lookup). Motion respects the system's reduce-motion setting.
 
 ## Design decisions
 
@@ -75,7 +91,7 @@ The model has exactly two jobs:
 1. **Extraction.** Each chat turn it returns only JSON: `{"booking_updates": {...}, "item_updates": [{"op": "add|update|remove", "match_sku_or_index": ..., "fields": {...}}], "reply_hint": "..."}`. Code then validates every value against the allowed values (cities per country, priorities, Warehouse/Business address, Yes/No), maps synonyms ("Frankfurt am Main" → Frankfurt, "a shop" → Business address, "cheap" → Cheapest), and merges it. Relative edits come back as `"+1"`, and **code** does the addition. If a value is ambiguous ("Germany" with no city, "Lyon, Germany", "Munich"), code asks, offering the allowed options. Even the reply is composed in code (`chat_state.build_reply`), so the assistant only ever asks for fields that are actually missing, one or two at a time, never re-asking.
 2. **R-06 second opinion.** The keyword screen splits descriptions into clear hits (Red: power bank, Li-ion, perfume, hairspray, nail polish, vape, hand sanitiser…), negations it ignores (battery-free, alcohol-free, non-aerosol, candles), and ambiguous words (Advisory: wireless, battery, cleaning, cosmetics…). Only ambiguous items go to the model, which returns `{"contains_dg": "yes|no|unsure", "category", "why"}`. "Yes" adds an R-06 Red labelled **"Flagged by AI review – please confirm"**; "unsure" keeps the Advisory with the explanation; "no" removes nothing and shows "AI review: likely safe". The status is then recomputed by the engine's own status rule (`engine.apply_ai_review`).
 
-Without a key, everything still works: chat becomes the guided form, R-06 is keyword-only, and AI notes are simply omitted.
+Without a key, everything still works: every question has tap-to-answer controls and short typed answers go straight to the field being asked, R-06 is keyword-only, and AI notes are simply omitted.
 
 ### How R-05 drives eligibility (the circular rule)
 
@@ -104,9 +120,9 @@ Equal-weight min-max scoring picks Carrier C (the most expensive) on every route
 
 ## Deploy (Streamlit Community Cloud)
 
-1. Push this folder to a GitHub repository.
+1. Push this folder to a GitHub repository (including `pallet_ui/frontend/dist`; `node_modules` is ignored).
 2. At [share.streamlit.io](https://share.streamlit.io), **Create app** → pick the repo, branch `main`, main file `app.py`.
-3. Optional: **Advanced settings → Secrets**: `ANTHROPIC_API_KEY = "sk-ant-..."`. Without it, the app runs in form mode.
+3. Optional: **Advanced settings → Secrets**: `ANTHROPIC_API_KEY = "sk-ant-..."`. Without it, the app runs in guided (tap-to-answer) mode.
 4. Deploy, then open the URL in an incognito window and on a phone. Wake it up shortly before judging (free apps sleep when idle).
 
 `requirements.txt` is pinned; Python 3.12.

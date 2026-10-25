@@ -793,7 +793,7 @@ def recommend(gross_kg: float | None, pallets: float | None, dest_country: str |
         c = cost(o)
         n = o.pallets_needed
         pal = f" on {n} pallet{'s' if n != 1 else ''}" if out["none_fit"] else ""
-        return f"{money(c)}{pal}, {o.transit_days} days, {o.on_time}% on time"
+        return f"{money(c)}{pal}, {o.transit_days} working days, {o.on_time}% on time"
 
     others = [o for o in opts if o is not win]
     prio_note = "" if priority in PRIORITIES else " (no valid priority given, so we used Balanced)"

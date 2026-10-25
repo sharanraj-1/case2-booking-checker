@@ -457,11 +457,11 @@ def result_diff(old, new) -> list[str]:
                 out.append(f"{r} now {'fails' if b in ('Red', 'Amber') else 'needs data'} ({b})")
             else:
                 out.append(f"{r} {a} → {b}")
-    if old.recommendation != new.recommendation and new.recommendation:
-        out.append(f"Carrier {old.recommendation or '—'} → {new.recommendation}")
-    if old.total_cost != new.total_cost and new.total_cost is not None:
+    if old.recommendation != new.recommendation and new.recommendation and old.recommendation:
+        out.append(f"Carrier: {old.recommendation} → {new.recommendation}")
+    if old.total_cost != new.total_cost and new.total_cost is not None and old.total_cost is not None:
         out.append(f"Cost {engine.money(old.total_cost)} → {engine.money(new.total_cost)}")
-    if old.eta != new.eta and new.eta:
+    if old.eta != new.eta and new.eta and old.eta:
         out.append(f"Delivery {engine.format_date(old.eta)} → {engine.format_date(new.eta)}")
     if old.status != new.status:
         out.append(f"Status {old.status} → {new.status}")
