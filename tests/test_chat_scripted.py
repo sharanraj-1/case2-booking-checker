@@ -59,7 +59,7 @@ def test_missing_fields_then_complete():
     p = bridge.payload(sess, today=TODAY)["chat"]
     assert p["complete"], p["ask"]
     r = p["result"]
-    assert r["view"]["label"] == "Good to go" and r["recommendation"] == "Carrier A" and r["confirmation"]["cost"] == "£540.00"
+    assert r["view"]["label"] == "Good to go" and r["recommendation"] == "Economy" and r["confirmation"]["cost"] == "£540.00"
 
 
 def test_mid_conversation_changes():
@@ -77,7 +77,7 @@ def test_mid_conversation_changes():
     items = sess["chat"]["state"]["items"]
     assert len(items) == 1 and "mug" in items[0]["description"].lower()
     assert b["priority"] == "Fastest"
-    assert bridge.payload(sess, today=TODAY)["chat"]["result"]["recommendation"] == "Carrier C"
+    assert bridge.payload(sess, today=TODAY)["chat"]["result"]["recommendation"] == "Express"
 
 
 def test_off_topic_is_refused():

@@ -76,7 +76,7 @@ function PickCard({ r }: { r: Result }) {
       {pick ? (
         <>
           <div className="mt-2 text-[30px] font-semibold tracking-[-0.03em] text-gradient">{pick.carrier}</div>
-          <div className="text-[13.5px] text-muted">{pick.service}</div>
+          <div className="text-[13.5px] text-muted">Road freight · {pick.transit} working days</div>
           <div className="mt-4 grid grid-cols-3 gap-3">
             <Stat label="Cost" value={r.confirmation.cost ?? pick.cost_label} />
             <Stat label="Arrives" value={niceDate(r.confirmation.eta)} />
@@ -206,7 +206,7 @@ function CarrierCard({ o, i, why }: { o: CarrierOption; i: number; why: string }
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className={cn("grid h-9 w-9 place-items-center rounded-xl border", o.picked ? "border-cyan/40 bg-cyan/10" : "border-white/10 bg-white/[0.04]")}><Truck className={cn("h-4.5 w-4.5", o.picked ? "text-cyan" : "text-muted")} /></div>
-            <div><div className="text-[15px] font-semibold">{o.carrier}</div><div className="text-[12.5px] text-muted">{o.service}</div></div>
+            <div><div className="text-[16px] font-semibold tracking-[-0.01em]">{o.carrier}</div><div className="text-[12.5px] text-muted">Road freight</div></div>
           </div>
           {o.picked ? <Pill tone="cyan"><Sparkles className="h-3 w-3" /> Our pick</Pill> : o.eligible === false ? <Pill tone="red">Can't take it</Pill> : <Pill tone="gray">Option</Pill>}
         </div>
@@ -337,7 +337,7 @@ export function Results({ r, onFix, pending, showConfirmation = true, confirmed 
       <Section title="The 10 checks" sub="Green means passed. Tap a check to see the problem or why it matters.">
         <div id="checks-grid" className="scroll-mt-28 rounded-2xl"><ChecksGrid r={r} /></div>
       </Section>
-      <Section title="Carriers compared" sub="All three options on this route. Tap a card to see why it was or wasn't picked.">
+      <Section title="Carriers compared" sub="All three options on this route. Tap a card to see why it was or wasn't picked. (Economy, Standard and Express are Carriers A, B and C on the rate card.)">
         <Carriers r={r} />
       </Section>
       <Section title="Compare with the market" sub="Optional: real prices from other carriers right now.">

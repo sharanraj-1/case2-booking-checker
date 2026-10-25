@@ -51,7 +51,7 @@ def test_no_ai_conversation_reaches_ready_and_confirms():
     chat = p["chat"]
     assert chat["complete"] and chat["ask"] is None
     r = chat["result"]
-    assert r["view"]["label"] == "Good to go" and r["recommendation"] == "Carrier A"
+    assert r["view"]["label"] == "Good to go" and r["recommendation"] == "Economy"
     assert r["confirmation"]["cost"] == "£540.00"
     send(sess, ev("confirm"))
     assert bridge.payload(sess, today=TODAY)["chat"]["confirmed"]

@@ -19,6 +19,7 @@ import chat_state
 import engine
 import knowledge
 import live_rates
+import naming
 from engine import FIELD_LABELS, format_date, kg, money, num
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -498,7 +499,7 @@ def serialise(res: engine.BookingResult, live: dict | None = None) -> dict:
         "blocked": blocked,
         "route": f"{b.get('origin_city') or '?'} → {b.get('dest_city') or '?'}, {b.get('dest_country') or '?'}",
         "seller": b.get("seller") or "",
-        "carrier": f"{opt.carrier} · {opt.service}" if opt else None,
+        "carrier": f"{opt.carrier} · road, {opt.transit_days} working days, {opt.on_time}% on time" if opt else None,
         "cost": money(res.total_cost) if res.total_cost is not None else None,
         "cost_detail": (f"{_plural(opt.pallets, 'pallet')} × {money(opt.price_per_pallet)}"
                         if opt and opt.eligible and opt.pallets else
@@ -627,7 +628,9 @@ def payload(sess: dict, review: Callable | None = None, today: date | None = Non
     return {
         "ack": sess.get("last_id"), "ai": bool(sess.get("ai_on")), "today": format_date(today),
         "download": sess.get("download"),
-        "flash": sess.get("flash"), "chat": chat_view(sess, review, today), "file": file_view(sess, review, today),
+        # Customer-facing names (Economy/Standard/Express) applied once, to everything the UI shows.
+        "flash": sess.get("flash"), "chat": naming.brand(chat_view(sess, review, today)),
+        "file": naming.brand(file_view(sess, review, today)),
         "coo_options": engine.COO_ALLOWED, "item_fields": {k: list(v) for k, v in ITEM_FIELD_INFO.items()},
         "tariff_link": TARIFF_LOOKUP,
     }

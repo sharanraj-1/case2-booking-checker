@@ -160,7 +160,7 @@ def test_live_prices_are_advisory_and_follow_the_load():
               "pallet_type": "3 × Quarter", "fetched_at": "21:40", "error": None, "source": "Pallet2Ship"}
     bridge.handle_event(sess, ev("live_rates", scope="chat"), today=TODAY, fetch_live=lambda *a: quotes)
     r = bridge.payload(sess, today=TODAY)["chat"]["result"]
-    assert r["live"]["ok"] and r["recommendation"] == "Carrier A"  # our pick unchanged
+    assert r["live"]["ok"] and r["recommendation"] == "Economy"  # our pick unchanged
     assert "Cheapest live price: £444.02" in r["live"]["summary"]
     bridge.handle_event(sess, ev("edit", field="pallets", value="+1"), today=TODAY)
     assert bridge.payload(sess, today=TODAY)["chat"]["result"]["live"] is None  # stale quotes hidden
@@ -184,3 +184,28 @@ def test_live_rates_parser():
     q = live_rates.parse_quotes(page)
     assert [x["service"] for x in q] == ["K+N Economy", "DHL Express"] and q[0]["transit"] == "3-8 Working days"
     assert live_rates.pallet_type(207)[0] == "packages1" and live_rates.pallet_type(1300) is None
+
+
+# --- Customer-facing carrier names ----------------------------------------------------
+
+def test_carriers_show_service_names_everywhere():
+    import json
+    sess = _complete()
+    bridge.handle_event(sess, ev("edit", field="priority", value="Fastest"), today=TODAY)
+    p = bridge.payload(sess, today=TODAY)
+    text = json.dumps({"chat": p["chat"]})
+    assert "Carrier A" not in text and "Carrier B" not in text and "Carrier C" not in text
+    r = p["chat"]["result"]
+    assert [o["carrier"] for o in r["options"]] == ["Economy", "Standard", "Express"]
+    assert r["recommendation"] == "Express" and r["reason"].startswith("Express is the fastest")
+    assert any(e.startswith("Carrier: Economy → Express") for m in p["chat"]["messages"] for e in m.get("effects", []))
+
+
+def test_downloads_use_service_names():
+    import openpyxl
+    from ui import export
+    sess = bridge.new_session()
+    bridge.handle_event(sess, ev("sample"), today=TODAY)
+    wb = openpyxl.load_workbook(io.BytesIO(base64.b64decode(bridge.payload(sess, today=TODAY)["file"]["xlsx"])))
+    text = " ".join(str(c.value) for ws in wb for row in ws.iter_rows() for c in row if c.value is not None)
+    assert "Economy" in text and "Carrier A" not in text and "Carrier B" not in text

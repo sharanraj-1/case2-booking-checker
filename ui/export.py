@@ -7,6 +7,7 @@ import io
 import pandas as pd
 
 import engine
+import naming
 from engine import format_date, num
 
 STATUS_EMOJI = {"Blocked": "🔴", "Ready with warnings": "🟠", "Ready": "🟢"}
@@ -53,7 +54,7 @@ def invoice_xlsx(r: engine.BookingResult) -> bytes:
         ("Related paperwork (proforma / PO / contract no. and date)", "[ADD]"),
         ("Incoterms", "[ADD e.g. DAP or DDP]"), ("Currency", "GBP"), ("Method of payment", "[ADD]"),
         ("Transport", f"Road freight, {b.get('origin_city') or '?'} → {b.get('dest_city') or '?'}, {b.get('dest_country') or '?'}"
-                      + (f", {opt.carrier} ({opt.service})" if opt else "")),
+                      + (f", {naming.name(opt.carrier)} service" if opt else "")),
         ("Packages", f"{num(r.item_cartons) if r.item_cartons is not None else '[ADD]'} boxes on "
                      f"{num(b.get('pallets')) if b.get('pallets') else '[ADD]'} pallets; marks: box 1 to "
                      f"{num(r.item_cartons) if r.item_cartons else 'N'} with invoice number"),
@@ -124,6 +125,7 @@ def to_xlsx(results: list[engine.BookingResult]) -> bytes:
         "Transit (working days)": o.transit_days, "On time %": o.on_time, "Max kg/pallet": o.max_kg,
         "Est. delivery": format_date(o.eta), "Excluded because": o.excluded_reason,
     } for r in results for o in r.options])
+    summary, findings, options = (df.map(naming.brand) for df in (summary, findings, options))
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as xw:
         summary.to_excel(xw, sheet_name="Summary", index=False)
