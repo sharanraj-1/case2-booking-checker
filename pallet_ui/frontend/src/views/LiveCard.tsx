@@ -2,7 +2,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, Check, ChevronRight, CircleDashed, Minus, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { useState } from "react";
-import { Button, Pill } from "../components/fx";
+import { Button, Limit, Pill } from "../components/fx";
 import { Flag } from "../components/Icon";
 import { cn, EASE, focusEl, niceDate, toDDMMYYYY, toISO } from "../lib/cn";
 import type { ChatView, Row } from "../types";
@@ -48,6 +48,7 @@ function Editor({ row, ctx, close }: { row: Row; ctx: AskCtx; close: () => void 
   return (
     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3, ease: EASE }} className="overflow-hidden">
       <div className="pb-3 pt-1">
+        <Limit text={row.limit} className="mb-2 mt-0" />
         {row.kind === "choice" ? (
           <div className="flex flex-wrap gap-1.5">
             {(row.options ?? []).map((o) => (
@@ -56,7 +57,8 @@ function Editor({ row, ctx, close }: { row: Row; ctx: AskCtx; close: () => void 
           </div>
         ) : (
           <div className="flex gap-2">
-            <input autoFocus type={row.kind === "date" ? "date" : "text"} inputMode={row.kind === "number" ? "decimal" : undefined} value={v} onChange={(e) => setV(e.target.value)}
+            <input autoFocus type={row.kind === "date" ? "date" : "text"} inputMode={row.kind === "number" || row.kind === "stepper" ? "decimal" : undefined} value={v} onChange={(e) => setV(e.target.value)}
+              maxLength={row.key === "seller" ? ctx.limits.seller_max : 40} min={row.kind === "date" ? toISO(ctx.today) : undefined}
               onKeyDown={(e) => e.key === "Enter" && commit(row.kind === "date" ? toDDMMYYYY(v) : v)} className="field h-10 flex-1 text-[14px]" />
             <Button size="sm" onClick={() => commit(row.kind === "date" ? toDDMMYYYY(v) : v)}>Save</Button>
           </div>

@@ -135,7 +135,7 @@ export default function App() {
   }
 
   const started = startedLocal || p.chat.messages.length > 1;
-  const ctx = { send, pending: !!pending, pendingType: pending?.type ?? null, today: p.today, coo: p.coo_options, fields: p.item_fields, tariff: p.tariff_link };
+  const ctx = { send, pending: !!pending, pendingType: pending?.type ?? null, today: p.today, coo: p.coo_options, fields: p.item_fields, tariff: p.tariff_link, limits: p.limits };
   const pendingText = pending && ["say", "answer", "item", "edit", "remove_item", "fix"].includes(pending.type) && tab === "book"
     ? (pending.type === "say" || pending.type === "answer" ? pending.label ?? null : null) : null;
 

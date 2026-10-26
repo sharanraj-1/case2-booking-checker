@@ -116,6 +116,17 @@ export const Button = forwardRef<HTMLButtonElement, BtnProps>(function Button(
   );
 });
 
+/** The limit for an input, always visible under it; amber when the current value goes over. */
+export function Limit({ text, over, className }: { text?: string | null; over?: string | null; className?: string }) {
+  if (!text && !over) return null;
+  return (
+    <div className={cn("mt-1.5 flex items-start gap-1.5 text-[12.5px] leading-snug", over ? "text-warn" : "text-muted", className)}>
+      <span className={cn("mt-[4px] inline-block h-1.5 w-1.5 shrink-0 rounded-full", over ? "bg-warn" : "bg-cyan/70")} />
+      <span>{over ?? <><span className="font-semibold text-fg/85">Limit:</span> {text}</>}</span>
+    </div>
+  );
+}
+
 export function Skeleton({ className }: { className?: string }) {
   return <div className={cn("skeleton", className)} />;
 }

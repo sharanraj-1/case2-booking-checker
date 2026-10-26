@@ -2,12 +2,12 @@
 import { motion } from "framer-motion";
 import { ArrowRight, ChevronRight, ExternalLink, Minus, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "../components/fx";
+import { Button, Limit } from "../components/fx";
 import { OptionIcon } from "../components/Icon";
 import { addDays, cn, EASE, fmt, niceDate, toDDMMYYYY, toISO } from "../lib/cn";
-import type { Ask, Item, Send } from "../types";
+import type { Ask, Item, Limits, Send } from "../types";
 
-export interface AskCtx { send: Send; pending: boolean; pendingType: string | null; today: string; coo: string[]; fields: Record<string, [string, string, string]>; tariff: string }
+export interface AskCtx { send: Send; pending: boolean; pendingType: string | null; today: string; coo: string[]; fields: Record<string, [string, string, string, string]>; tariff: string; limits: Limits }
 
 export function AskControl({ ask, ctx, items }: { ask: Ask; ctx: AskCtx; items: Item[] }) {
   return (
@@ -15,6 +15,7 @@ export function AskControl({ ask, ctx, items }: { ask: Ask; ctx: AskCtx; items: 
       className="rounded-3xl border border-white/10 bg-white/[0.035] p-4 sm:p-5">
       <div className="text-[16px] font-semibold tracking-[-0.015em]">{ask.question}</div>
       {ask.hint && <div className="mt-0.5 text-[13px] text-muted">{ask.hint}</div>}
+      {ask.kind !== "number" && ask.kind !== "text" && <Limit text={ask.limit} />}
       <div className="mt-4">
         {ask.kind === "choice" && <Choice ask={ask} ctx={ctx} />}
         {ask.kind === "number" && <NumberAsk ask={ask} ctx={ctx} />}
@@ -55,7 +56,11 @@ function NumberAsk({ ask, ctx }: { ask: Ask; ctx: AskCtx }) {
   const isPallets = ask.field === "pallets";
   const [v, setV] = useState<string>(isPallets ? "1" : "");
   const n = Number(v);
-  const ok = v.trim() !== "" && Number.isFinite(n) && n > 0;
+  const whole = !isPallets || Number.isInteger(n);
+  const ok = v.trim() !== "" && Number.isFinite(n) && n > 0 && whole;
+  const over = !isPallets && ask.max && n > ask.max
+    ? `That's over the limit: ${n.toLocaleString()} kg is more than ${ask.max.toLocaleString()} kg. You can still continue and we'll tell you how many pallets you need.`
+    : isPallets && v && !whole ? "Pallets must be a whole number." : null;
   const submit = () => ok && ctx.send({ type: "answer", field: ask.field, value: v.trim(), label: `${v.trim()} ${ask.unit ?? ""}`.trim() });
   return (
     <div className="space-y-3">
@@ -69,6 +74,7 @@ function NumberAsk({ ask, ctx }: { ask: Ask; ctx: AskCtx }) {
         </div>
         {isPallets && <StepBtn onClick={() => setV(String((n || 0) + 1))}><Plus className="h-4 w-4" /></StepBtn>}
       </div>
+      <Limit text={ask.limit} over={over} className="-mt-1" />
       <Button className="w-full" size="lg" disabled={!ok || ctx.pending} onClick={submit}>Continue <ArrowRight className="h-4 w-4" /></Button>
     </div>
   );
@@ -108,11 +114,15 @@ function DateAsk({ ask, ctx }: { ask: Ask; ctx: AskCtx }) {
 
 function TextAsk({ ask, ctx }: { ask: Ask; ctx: AskCtx }) {
   const [v, setV] = useState("");
+  const max = ask.field === "seller" ? ctx.limits.seller_max : 200;
   const submit = () => v.trim() && ctx.send({ type: "answer", field: ask.field, value: v.trim(), label: v.trim() });
   return (
-    <div className="flex gap-2">
-      <input autoFocus value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} placeholder={ask.placeholder} className="field h-12 flex-1" />
-      <Button disabled={!v.trim() || ctx.pending} onClick={submit}>Continue</Button>
+    <div>
+      <div className="flex gap-2">
+        <input autoFocus value={v} maxLength={max} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} placeholder={ask.placeholder} className="field h-12 flex-1" />
+        <Button disabled={!v.trim() || ctx.pending} onClick={submit}>Continue</Button>
+      </div>
+      <Limit text={`${ask.limit ?? ""} ${v.length}/${max} used.`.trim()} over={v.length >= max ? `That's the maximum: ${max} characters.` : null} />
     </div>
   );
 }
@@ -127,7 +137,21 @@ export function ItemForm({ ctx, index, item, only, onDone }: { ctx: AskCtx; inde
   const shown = ORDER.filter((k) => showAll || (only ?? []).includes(k) || k === "description" && !item);
   const visible = shown.filter((k) => k !== "cartons" || showAll);
   const numeric = (k: string) => ["qty", "unit_price", "units_per_carton", "unit_kg", "cartons"].includes(k);
-  const bad = (k: string) => numeric(k) && vals[k] !== "" && !(Number(vals[k]) > 0);
+  const qtyNow = Number(vals.qty || (item?.qty ?? NaN));
+  const problem = (k: string): string | null => {
+    const raw = vals[k].trim();
+    if (!raw) return null;
+    const n = Number(raw);
+    if (numeric(k) && !(n > 0)) return "Must be more than 0.";
+    if (["qty", "units_per_carton", "cartons"].includes(k) && !Number.isInteger(n)) return "Must be a whole number.";
+    if (k === "units_per_carton" && Number.isFinite(qtyNow) && n > qtyNow) return `Can't be more than the quantity (${qtyNow.toLocaleString()}).`;
+    if (k === "hs_code" && !/^\d+$/.test(raw)) return "Digits only.";
+    if (k === "hs_code" && raw.length < 6) return `Needs at least 6 digits (${raw.length} so far).`;
+    if (k === "description" && raw.length >= ctx.limits.description_max) return `That's the maximum: ${ctx.limits.description_max} characters.`;
+    return null;
+  };
+  const blocking = (k: string) => { const p = problem(k); return !!p && !p.startsWith("Needs at least") && !p.startsWith("That's the maximum"); };
+  const bad = (k: string) => blocking(k);
   const canSave = (index !== null || vals.description.trim() !== "") && !ORDER.some(bad);
   function save() {
     const fields: Record<string, string> = {};
@@ -140,7 +164,7 @@ export function ItemForm({ ctx, index, item, only, onDone }: { ctx: AskCtx; inde
     <div className="space-y-3">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {visible.map((k) => {
-          const [label, ph, kind] = ctx.fields[k] ?? [k, "", "text"];
+          const [label, ph, kind] = ctx.fields[k] ?? [k, "", "text", ""];
           return (
             <label key={k} className={cn("block", k === "description" && "sm:col-span-2")}>
               <span className="mb-1.5 flex items-center justify-between text-[12.5px] font-medium text-muted">
@@ -153,10 +177,13 @@ export function ItemForm({ ctx, index, item, only, onDone }: { ctx: AskCtx; inde
                   {ctx.coo.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               ) : (
-                <input value={vals[k]} inputMode={numeric(k) ? "decimal" : undefined} placeholder={ph}
-                  onChange={(e) => setVals({ ...vals, [k]: e.target.value })} onKeyDown={(e) => e.key === "Enter" && canSave && save()}
+                <input value={vals[k]} inputMode={numeric(k) || k === "hs_code" ? "decimal" : undefined} placeholder={ph}
+                  maxLength={k === "description" ? ctx.limits.description_max : k === "hs_code" ? ctx.limits.hs_max : undefined}
+                  onChange={(e) => setVals({ ...vals, [k]: k === "hs_code" ? e.target.value.replace(/[^\d]/g, "") : e.target.value })}
+                  onKeyDown={(e) => e.key === "Enter" && canSave && save()}
                   className={cn("field h-12", bad(k) && "border-bad/60")} />
               )}
+              <Limit text={(ctx.fields[k]?.[3] ?? "") + (k === "description" && vals[k] ? ` (${vals[k].length}/${ctx.limits.description_max})` : "")} over={problem(k)} />
             </label>
           );
         })}

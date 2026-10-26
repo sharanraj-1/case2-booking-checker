@@ -141,13 +141,18 @@ export function BookView({ chat, ctx, ai, pendingText, started, onStart, onFile,
                 {chat.ask && !ctx.pending && <AskControl key={`${chat.ask.field}${chat.ask.item_index ?? ""}`} ask={chat.ask} ctx={ctx} items={chat.items} />}
               </AnimatePresence>
               <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-1.5 pl-4 focus-within:border-violet/60 focus-within:shadow-[0_0_0_4px_rgba(139,92,246,0.15)]">
-                <textarea ref={composerRef} rows={1} value={text} onChange={(e) => setText(e.target.value)}
+                <textarea ref={composerRef} rows={1} value={text} maxLength={ctx.limits.message_max} onChange={(e) => setText(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
                   placeholder={ai ? (started ? "Type anything, e.g. \"make it 4 pallets\" or \"drop the candles\"" : "e.g. 3 pallets of mugs from London to a warehouse in Berlin next Thursday")
                     : (chat.ask ? "Or type your answer…" : "Tap a detail on the right to change it")}
                   className="max-h-32 min-h-[40px] flex-1 resize-none bg-transparent py-2.5 text-[15px] outline-none placeholder:text-faint" />
                 <Button size="sm" className="h-10 w-10 rounded-xl px-0" disabled={!text.trim() || ctx.pending} onClick={submit} aria-label="Send"><ArrowUp className="h-4.5 w-4.5" /></Button>
               </div>
+              {text.length > ctx.limits.message_max * 0.8 && (
+                <div className={cn("-mt-1 text-right text-[12px]", text.length >= ctx.limits.message_max ? "text-warn" : "text-faint")}>
+                  {text.length.toLocaleString()} / {ctx.limits.message_max.toLocaleString()} characters (limit)
+                </div>
+              )}
               {!started && ai && (
                 <div className="flex flex-wrap gap-2">
                   {["I need to send some mugs to Germany next week", "4 pallets of candles to a shop in Paris, cheapest"].map((ex) => (

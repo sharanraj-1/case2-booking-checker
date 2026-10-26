@@ -22,6 +22,10 @@ from engine import FIELD_LABELS, is_blank, parse_number
 BOOKING_KEYS = ["seller", "origin_city", "origin_country", "dest_city", "dest_country", "dest_type",
                 "ready_date", "priority", "pallets", "cartons", "declared_value", "currency", "gross_kg",
                 "appointment"]
+MAX_SELLER = 100
+MAX_DESCRIPTION = 200
+HS_MAX_DIGITS = 10
+
 ITEM_KEYS = ["sku", "description", "hs_code", "qty", "unit_price", "units_per_carton", "cartons", "unit_kg", "coo"]
 INT_FIELDS = {"pallets", "cartons", "qty", "units_per_carton"}
 POSITIVE_FIELDS = {"pallets", "gross_kg", "qty", "unit_price", "units_per_carton", "unit_kg", "declared_value", "cartons"}
@@ -103,6 +107,8 @@ def validate_booking_field(field: str, raw: Any, booking: dict) -> tuple[Any, st
         return None, None
     s = str(raw).strip()
     if field == "seller":
+        if len(s) > MAX_SELLER:
+            return None, f"Business name can be up to {MAX_SELLER} characters (that one is {len(s)})."
         return s, None
     if field == "origin_country":
         c = engine.canon_country(s)
@@ -174,12 +180,16 @@ def validate_item_field(field: str, raw: Any, item: dict) -> tuple[Any, str | No
         hs = engine.hs_text(raw)
         if not hs.isdigit():
             return None, f"HS code '{raw}' should be digits only (6 to 10 of them)."
-        return hs, None  # length is checked by R-01, not here
+        if len(hs) > HS_MAX_DIGITS:
+            return None, f"HS codes have at most {HS_MAX_DIGITS} digits; '{hs}' has {len(hs)}."
+        return hs, None  # too short is reported by R-01, not here
     if field == "coo":
         c = engine.canon_country(raw)
         if c in engine.COO_ALLOWED:
             return c, None
         return str(raw).strip(), None  # kept as given; the engine adds an advisory
+    if field == "description" and len(str(raw).strip()) > MAX_DESCRIPTION:
+        return None, f"Product description can be up to {MAX_DESCRIPTION} characters."
     return str(raw).strip(), None
 
 

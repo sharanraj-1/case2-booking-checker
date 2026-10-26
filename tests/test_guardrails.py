@@ -209,3 +209,45 @@ def test_downloads_use_service_names():
     wb = openpyxl.load_workbook(io.BytesIO(base64.b64decode(bridge.payload(sess, today=TODAY)["file"]["xlsx"])))
     text = " ".join(str(c.value) for ws in wb for row in ws.iter_rows() for c in row if c.value is not None)
     assert "Economy" in text and "Carrier A" not in text and "Carrier B" not in text
+
+
+# --- Input limits ----------------------------------------------------------------------
+
+def test_every_input_states_its_limit():
+    sess = bridge.new_session()
+    seen = {}
+    from tests.test_bridge import walk_no_ai  # noqa: F401
+    answers = {"dest_country": "Germany", "dest_city": "Berlin", "ready_date": "05-11-2026", "pallets": "3",
+               "gross_kg": "620", "dest_type": "Warehouse", "appointment": "Yes", "priority": "Cheapest",
+               "origin_city": "London", "seller": "Northfield Goods"}
+    for _ in range(30):
+        ask = bridge.next_ask(sess["chat"]["state"])
+        if ask is None:
+            break
+        if ask["kind"] == "item":
+            bridge.handle_event(sess, ev("item", index=ask["item_index"], fields={
+                "description": "Mugs", "qty": "1080", "unit_price": "5", "units_per_carton": "12", "unit_kg": "0.5",
+                "hs_code": "691200", "coo": "United Kingdom"}), today=TODAY)
+            continue
+        seen[ask["field"]] = ask.get("limit")
+        bridge.handle_event(sess, ev("answer", field=ask["field"], value=answers[ask["field"]]), today=TODAY)
+    for f in ("dest_country", "ready_date", "pallets", "gross_kg", "origin_city", "seller"):
+        assert seen.get(f), f
+    assert "Express 400 kg, Economy 500 kg, Standard 750 kg" in seen["pallets"]
+    assert "Up to 2,250 kg on 3 pallets" in seen["gross_kg"]
+    p = bridge.payload(sess, today=TODAY)
+    rows = {r["key"]: r["limit"] for r in p["chat"]["rows"]}
+    assert "90 boxes" in rows["cartons"] and "£5,346.00 to £5,454.00" in rows["declared_value"]
+    assert all(len(v) == 4 and v[3] for v in p["item_fields"].values())
+    assert p["limits"]["top_kg"] == 750 and p["limits"]["message_max"] == 1500
+
+
+def test_limits_are_enforced_on_the_server():
+    import chat_state as cs
+    assert cs.validate_booking_field("seller", "x" * 101, {})[1]
+    assert cs.validate_booking_field("seller", "x" * 100, {})[0]
+    assert "at most 10 digits" in cs.validate_item_field("hs_code", "12345678901", {})[1]
+    assert cs.validate_item_field("description", "y" * 201, {})[1]
+    sess = bridge.new_session()
+    bridge.handle_event(sess, ev("say", text="z" * 5000), today=TODAY)
+    assert len(sess["chat"]["messages"][-2]["text"]) == 1500  # message capped

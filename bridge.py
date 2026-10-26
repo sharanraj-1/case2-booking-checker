@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import copy
 import io
+import math
 import os
 from datetime import date
 from typing import Any, Callable
@@ -41,16 +42,61 @@ PLAIN_RULE = {
 FLAGS = {"Germany": "flag-DE", "France": "flag-FR", "Netherlands": "flag-NL", "United Kingdom": "flag-GB"}  # icon keys drawn by the UI
 PRIORITY_INFO = {"Cheapest": ("Lowest price", "pound"), "Fastest": ("Quickest delivery", "zap"),
                  "Most reliable": ("Best on-time record", "shield"), "Balanced": ("Good all-round", "scale")}
+# (label, placeholder, kind, limit shown under the field)
 ITEM_FIELD_INFO = {
-    "description": ("What is it?", "e.g. Ceramic coffee mugs", "text"),
-    "qty": ("How many units?", "e.g. 1080", "number"),
-    "unit_price": ("Price per unit (£)", "e.g. 5", "number"),
-    "units_per_carton": ("Units in each box", "e.g. 12", "number"),
-    "cartons": ("Number of boxes", "Leave blank and we'll work it out", "number"),
-    "unit_kg": ("Weight of one unit (kg)", "e.g. 0.5", "number"),
-    "hs_code": ("Customs code (HS code)", "6 to 10 digits, e.g. 691200", "text"),
-    "coo": ("Where was it made?", "Country of manufacture", "choice"),
+    "description": ("What is it?", "e.g. Ceramic coffee mugs", "text", f"Up to {chat_state.MAX_DESCRIPTION} characters"),
+    "qty": ("How many units?", "e.g. 1080", "number", "Whole number, 1 or more"),
+    "unit_price": ("Price per unit (£)", "e.g. 5", "number", "More than £0, in GBP"),
+    "units_per_carton": ("Units in each box", "e.g. 12", "number", "Whole number, 1 or more, no more than the quantity"),
+    "cartons": ("Number of boxes", "Leave blank and we'll work it out", "number", "Must equal quantity ÷ units per box"),
+    "unit_kg": ("Weight of one unit (kg)", "e.g. 0.5", "number", "More than 0 kg"),
+    "hs_code": ("Customs code (HS code)", "6 to 10 digits, e.g. 691200", "text", f"6 to {chat_state.HS_MAX_DIGITS} digits"),
+    "coo": ("Where was it made?", "Country of manufacture", "choice", "One of: " + ", ".join(engine.COO_ALLOWED)),
 }
+MAX_MESSAGE = 1500
+MAX_UPLOAD_MB = 15
+CARRIER_MAX_KG = {naming.name(c["carrier"]): c["max_kg"] for c in sorted(engine.CARRIERS, key=lambda c: c["max_kg"])}
+TOP_KG = max(CARRIER_MAX_KG.values())
+_PER_PALLET = ", ".join(f"{n} {kg} kg" for n, kg in CARRIER_MAX_KG.items())
+
+
+def limit_for(field: str, state: dict) -> str | None:
+    """The limit for a booking field, in plain words, worked out from the rate card and the current booking."""
+    b, items = state["booking"], state["items"]
+    pallets, gross = b.get("pallets"), b.get("gross_kg")
+    if field == "pallets":
+        need = f" For {kg(gross)} you need at least {math.ceil(gross / TOP_KG)}." if gross else ""
+        return f"Whole number, 1 or more. Max weight per pallet: {_PER_PALLET}.{need}"
+    if field == "gross_kg":
+        if pallets:
+            return (f"Up to {num(pallets * TOP_KG)} kg on {_plural(pallets, 'pallet')} "
+                    f"({TOP_KG} kg per pallet is the most any service takes; {_PER_PALLET}).")
+        return f"Up to {TOP_KG} kg per pallet ({_PER_PALLET}). Include boxes, packaging and pallets."
+    if field == "ready_date":
+        return f"Today ({format_date(engine.today_london())}) or later."
+    if field == "seller":
+        return f"Up to {chat_state.MAX_SELLER} characters."
+    if field == "cartons":
+        total = sum(int(i["cartons"]) for i in items if i.get("cartons")) if items else None
+        return f"Must match your products: {num(total)} boxes." if total else "Must match the boxes in your products."
+    if field == "declared_value":
+        priced = [i for i in items if i.get("qty") and i.get("unit_price")]
+        if priced:
+            t = sum(i["qty"] * i["unit_price"] for i in priced)
+            return f"Within 1% of your products' total ({money(t)}): {money(t * 0.99)} to {money(t * 1.01)}."
+        return "Must be within 1% of your products' total value."
+    if field in ("dest_city", "dest_country"):
+        return "We deliver to Berlin, Frankfurt, Hamburg, Paris, Lyon, Amsterdam and Rotterdam only."
+    if field == "origin_city":
+        return "We collect from London, Manchester, Birmingham or Leeds only."
+    return None
+
+
+def limits() -> dict:
+    """Numbers the UI uses to warn as people type (the server enforces them too)."""
+    return {"per_pallet": CARRIER_MAX_KG, "top_kg": TOP_KG, "seller_max": chat_state.MAX_SELLER,
+            "description_max": chat_state.MAX_DESCRIPTION, "hs_max": chat_state.HS_MAX_DIGITS,
+            "message_max": MAX_MESSAGE, "upload_mb": MAX_UPLOAD_MB, "live_max_pallets": 50, "live_max_kg": 1200}
 
 
 # ---------------------------------------------------------------------------
@@ -79,6 +125,10 @@ def _opt(value: str, hint: str = "", icon: str = "") -> dict:
 def next_ask(state: dict) -> dict | None:
     """The next question, with the closest valid option first when the seller named a place we don't serve."""
     ask = _next_ask(state)
+    if ask and ask["kind"] != "item":
+        ask["limit"] = limit_for(ask["field"], state)
+        if ask["field"] == "gross_kg" and state["booking"].get("pallets"):
+            ask["max"] = state["booking"]["pallets"] * TOP_KG
     sug = (state.get("suggest") or {}).get(ask["field"]) if ask else None
     if ask and sug and ask.get("options"):
         opts = ask["options"]
@@ -219,7 +269,7 @@ def handle_event(sess: dict, ev: dict, *, extractor: Callable | None = None, rev
     st = chat["state"]
 
     if kind == "say":
-        text = str(ev.get("text") or "").strip()[:2000]
+        text = str(ev.get("text") or "").strip()[:MAX_MESSAGE]
         if not text:
             return sess
         steer = _ask_text(next_ask(st)) or "Tap any detail of your booking to change it."
@@ -577,6 +627,7 @@ def _booking_rows(state: dict) -> list[dict]:
     for key, label, display, kind, options in rows:
         is_missing = key in missing or (key == "dest_city" and ("dest_country" in missing or not b.get("dest_city")))
         out.append({"key": key, "label": label, "display": display, "raw": b.get(key), "kind": kind,
+                    "limit": limit_for(key, state),
                     "options": options, "missing": bool(is_missing and not display),
                     "calculated": key in derived})
     return out
@@ -632,5 +683,6 @@ def payload(sess: dict, review: Callable | None = None, today: date | None = Non
         "flash": sess.get("flash"), "chat": naming.brand(chat_view(sess, review, today)),
         "file": naming.brand(file_view(sess, review, today)),
         "coo_options": engine.COO_ALLOWED, "item_fields": {k: list(v) for k, v in ITEM_FIELD_INFO.items()},
+        "limits": limits(),
         "tariff_link": TARIFF_LOOKUP,
     }

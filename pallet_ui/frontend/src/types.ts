@@ -17,13 +17,15 @@ export interface Ask {
   placeholder?: string;
   item_index?: number | null;
   missing?: string[];
+  limit?: string | null;
+  max?: number;
 }
 
 export interface Message { role: "user" | "assistant"; text: string; changes?: string[]; effects?: string[] }
 
 export interface Row {
   key: string; label: string; display: string | null; raw: unknown; kind: "text" | "choice" | "date" | "number" | "stepper";
-  options: string[] | null; missing: boolean; calculated: boolean;
+  options: string[] | null; missing: boolean; calculated: boolean; limit: string | null;
 }
 
 export interface Item {
@@ -87,7 +89,13 @@ export interface FileView {
 export interface Payload {
   ack: string | null; ai: boolean; today: string; flash: string | null; chat: ChatView; file: FileView | null;
   download: { id: string; name: string; b64: string } | null;
-  coo_options: string[]; item_fields: Record<string, [string, string, string]>; tariff_link: string;
+  coo_options: string[]; item_fields: Record<string, [string, string, string, string]>; tariff_link: string;
+  limits: Limits;
+}
+
+export interface Limits {
+  per_pallet: Record<string, number>; top_kg: number; seller_max: number; description_max: number; hs_max: number;
+  message_max: number; upload_mb: number; live_max_pallets: number; live_max_kg: number;
 }
 
 export type UIEvent = Record<string, unknown> & { type: string };

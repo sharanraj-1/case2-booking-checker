@@ -28,6 +28,7 @@ export function LivePrices({ r, loading, onFetch }: { r: Result; loading: boolea
         )}
       </div>
       {!r.can_live && !live && <p className="mt-3 text-[13px] text-faint">Add the destination, pallets and total weight first.</p>}
+      <p className="mt-2 text-[12px] text-faint"><span className="font-medium text-muted">Limit:</span> live quotes cover up to 50 pallets and 1,200 kg per pallet.</p>
       {loading && <div className="mt-4 space-y-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-12 rounded-2xl" />)}</div>}
       {!loading && live && !live.ok && <p className="mt-4 rounded-2xl border border-warn/25 bg-warn/[0.06] p-3 text-[13.5px]">{live.error}</p>}
       {!loading && live?.ok && (
