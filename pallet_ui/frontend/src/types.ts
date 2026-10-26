@@ -19,6 +19,7 @@ export interface Ask {
   missing?: string[];
   limit?: string | null;
   max?: number;
+  suggestions?: { value: string; label: string; hint: string; suggested: boolean }[];
 }
 
 export interface Message { role: "user" | "assistant"; text: string; changes?: string[]; effects?: string[] }

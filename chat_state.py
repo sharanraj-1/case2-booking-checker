@@ -50,8 +50,9 @@ ITEM_QUESTION_WORDS = {
     "coo": "the country of origin (where it was made)",
 }
 # Order to ask in: route and goods first, admin last.
-ASK_ORDER = ["dest_country", "dest_city", "items", "ready_date", "pallets", "gross_kg", "dest_type",
-             "appointment", "priority", "origin_city", "seller"]
+# Route and goods first, then priority, so we can suggest the weight and the pallet count.
+ASK_ORDER = ["dest_country", "dest_city", "items", "priority", "ready_date", "gross_kg", "pallets", "dest_type",
+             "appointment", "origin_city", "seller"]
 ITEM_ASK_ORDER = ["description", "qty", "unit_price", "hs_code", "units_per_carton", "cartons", "unit_kg", "coo"]
 
 

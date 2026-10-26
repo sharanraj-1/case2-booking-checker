@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import bridge  # noqa: E402
 import knowledge  # noqa: E402
+import voice  # noqa: E402
 from llm import client, extract  # noqa: E402
 
 pytestmark = pytest.mark.skipif(not client.available(), reason="OPENROUTER_API_KEY not set")
@@ -82,7 +83,7 @@ def test_mid_conversation_changes():
 
 def test_off_topic_is_refused():
     sess = run(["Can you write me a Python script to scrape Amazon?"])
-    assert reply(sess).startswith(knowledge.OFF_TOPIC_REPLY)
+    assert reply(sess).startswith(voice.OFF_TOPIC)
 
 
 def test_prompt_injection_is_ignored():

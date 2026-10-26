@@ -1,6 +1,6 @@
 // The control for the current question: option tiles, number, date, text or a product card.
 import { motion } from "framer-motion";
-import { ArrowRight, ChevronRight, ExternalLink, Minus, Plus } from "lucide-react";
+import { ArrowRight, ChevronRight, ExternalLink, Minus, Plus, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button, Limit } from "../components/fx";
 import { OptionIcon } from "../components/Icon";
@@ -12,7 +12,7 @@ export interface AskCtx { send: Send; pending: boolean; pendingType: string | nu
 export function AskControl({ ask, ctx, items }: { ask: Ask; ctx: AskCtx; items: Item[] }) {
   return (
     <motion.div key={`${ask.field}-${ask.item_index ?? ""}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: EASE }}
-      className="rounded-3xl border border-white/10 bg-white/[0.035] p-4 sm:p-5">
+      className="relative rounded-3xl border border-white/10 bg-[linear-gradient(180deg,rgba(139,92,246,0.07),rgba(255,255,255,0.025))] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.3)] sm:p-5">
       <div className="text-[16px] font-semibold tracking-[-0.015em]">{ask.question}</div>
       {ask.hint && <div className="mt-0.5 text-[13px] text-muted">{ask.hint}</div>}
       {ask.kind !== "number" && ask.kind !== "text" && <Limit text={ask.limit} />}
@@ -54,7 +54,7 @@ function Choice({ ask, ctx }: { ask: Ask; ctx: AskCtx }) {
 
 function NumberAsk({ ask, ctx }: { ask: Ask; ctx: AskCtx }) {
   const isPallets = ask.field === "pallets";
-  const [v, setV] = useState<string>(isPallets ? "1" : "");
+  const [v, setV] = useState<string>(isPallets && !ask.suggestions?.length ? "1" : "");
   const n = Number(v);
   const whole = !isPallets || Number.isInteger(n);
   const ok = v.trim() !== "" && Number.isFinite(n) && n > 0 && whole;
@@ -62,13 +62,31 @@ function NumberAsk({ ask, ctx }: { ask: Ask; ctx: AskCtx }) {
     ? `That's over the limit: ${n.toLocaleString()} kg is more than ${ask.max.toLocaleString()} kg. You can still continue and we'll tell you how many pallets you need.`
     : isPallets && v && !whole ? "Pallets must be a whole number." : null;
   const submit = () => ok && ctx.send({ type: "answer", field: ask.field, value: v.trim(), label: `${v.trim()} ${ask.unit ?? ""}`.trim() });
+  const sug = ask.suggestions ?? [];
   return (
     <div className="space-y-3">
+      {sug.length > 0 && (
+        <div className={cn("grid gap-2.5", sug.length === 2 ? "grid-cols-2" : sug.length > 2 ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-1")}>
+          {sug.map((o, i) => (
+            <motion.button key={o.value} disabled={ctx.pending} onClick={() => ctx.send({ type: "answer", field: ask.field, value: o.value, label: o.label })}
+              initial={{ opacity: 0, y: 12, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 24, delay: i * 0.07 }}
+              whileHover={{ y: -3 }} whileTap={{ scale: 0.96 }}
+              className={cn("group relative min-h-[84px] cursor-pointer overflow-hidden rounded-2xl border p-4 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-violet/70",
+                o.suggested ? "glow-border shimmer border-cyan/40 bg-[linear-gradient(135deg,rgba(34,211,238,0.12),rgba(139,92,246,0.12))]" : "border-white/10 bg-white/[0.04] hover:border-violet/55 hover:bg-violet/[0.09]")}>
+              {o.suggested && <span className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-cyan/15 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-cyan"><Sparkles className="h-3 w-3" /> Recommended</span>}
+              <span className="block text-[19px] font-semibold tracking-[-0.02em]">{o.label}</span>
+              <span className={cn("mt-0.5 block text-[12.5px] leading-snug", o.suggested ? "text-cyan-100/90" : "text-muted")}>{o.hint}</span>
+              <ArrowRight className="absolute right-3.5 top-3.5 h-4 w-4 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-fg" />
+            </motion.button>
+          ))}
+        </div>
+      )}
+      {sug.length > 0 && <div className="flex items-center gap-3 pt-1 text-[12px] text-faint"><span className="h-px flex-1 bg-white/8" />or enter your own<span className="h-px flex-1 bg-white/8" /></div>}
       <div className="flex items-stretch gap-2">
         {isPallets && <StepBtn onClick={() => setV(String(Math.max(1, (n || 1) - 1)))}><Minus className="h-4 w-4" /></StepBtn>}
         <div className="relative flex-1">
           <input autoFocus inputMode="decimal" type="number" min={ask.min as number} step={ask.step} value={v} onChange={(e) => setV(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submit()} placeholder={isPallets ? "1" : "e.g. 620"}
+            onKeyDown={(e) => e.key === "Enter" && submit()} placeholder={isPallets ? "e.g. 2" : "e.g. 620"}
             className="field h-14 pr-20 text-center text-[22px] font-semibold tracking-[-0.02em]" />
           <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[14px] text-muted">{ask.unit}</span>
         </div>

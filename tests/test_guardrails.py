@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import bridge  # noqa: E402
 import knowledge  # noqa: E402
+import voice  # noqa: E402
 from llm import extract  # noqa: E402
 
 TODAY = date(2026, 10, 25)
@@ -44,8 +45,8 @@ def last(sess):
 def test_off_topic_gets_fixed_refusal_and_is_steered_back():
     sess = bridge.new_session(ai_on=True)
     say(sess, "Write me a poem about the sea", {"intent": "off_topic"})
-    assert last(sess).startswith(knowledge.OFF_TOPIC_REPLY)
-    assert "Where's it going?" in last(sess)
+    assert last(sess).startswith(voice.OFF_TOPIC)
+    assert "Where's it heading?" in last(sess)
     assert sess["chat"]["state"]["booking"].get("dest_country") is None
 
 
@@ -66,7 +67,7 @@ def test_question_gets_curated_answer_only():
 def test_unknown_question_is_not_guessed():
     sess = bridge.new_session(ai_on=True)
     say(sess, "What's the weather in Berlin?", {"intent": "question", "topic": None})
-    assert "won't guess" in last(sess)
+    assert "rather not guess" in last(sess)
 
 
 def test_invented_values_are_dropped():
@@ -77,7 +78,7 @@ def test_invented_values_are_dropped():
     b = sess["chat"]["state"]["booking"]
     assert b.get("dest_country") == "Germany" and "pallets" not in b and "dest_city" not in b
     assert sess["chat"]["state"]["items"][0].get("qty") is None
-    assert "couldn't find" in last(sess)
+    assert "couldn't spot" in last(sess)
 
 
 def test_grounded_values_pass_including_conversions():
@@ -234,7 +235,8 @@ def test_every_input_states_its_limit():
     for f in ("dest_country", "ready_date", "pallets", "gross_kg", "origin_city", "seller"):
         assert seen.get(f), f
     assert "Express 400 kg, Economy 500 kg, Standard 750 kg" in seen["pallets"]
-    assert "Up to 2,250 kg on 3 pallets" in seen["gross_kg"]
+    assert "Up to 750 kg per pallet" in seen["gross_kg"]  # weight is now asked before pallets
+    assert "For 620 kg you need at least 1" in seen["pallets"]
     p = bridge.payload(sess, today=TODAY)
     rows = {r["key"]: r["limit"] for r in p["chat"]["rows"]}
     assert "90 boxes" in rows["cartons"] and "£5,346.00 to £5,454.00" in rows["declared_value"]

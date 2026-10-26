@@ -21,6 +21,8 @@ import engine
 import knowledge
 import live_rates
 import naming
+import planner
+import voice
 from engine import FIELD_LABELS, format_date, kg, money, num
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -106,7 +108,7 @@ def limits() -> dict:
 
 def new_chat(ai_on: bool) -> dict:
     return {"state": chat_state.new_state(), "turns": 0, "last_question": "",
-            "messages": [{"role": "assistant", "text": WELCOME if ai_on else WELCOME_NO_AI}]}
+            "messages": [{"role": "assistant", "text": voice.WELCOME_AI if ai_on else voice.WELCOME_GUIDED}]}
 
 
 def new_session(ai_on: bool = False) -> dict:
@@ -139,9 +141,21 @@ def next_ask(state: dict) -> dict | None:
     return ask
 
 
+def _item_ask(state: dict) -> dict | None:
+    for idx, miss in chat_state.missing_item_fields(state):
+        label = state["items"][idx].get("description") or f"product {idx + 1}"
+        return {"field": "items", "kind": "item", "item_index": idx, "missing": miss,
+                "question": f"A few more details about the {label}",
+                "hint": "These go on the customs paperwork."}
+    return None
+
+
 def _next_ask(state: dict) -> dict | None:
     b = state["booking"]
+    today = engine.today_london()
     for key in chat_state.missing_fields(state):
+        if key not in ("dest_country", "dest_city", "items") and _item_ask(state):
+            return _item_ask(state)  # product details first: the weight and pallet suggestions need them
         if key == "dest_country":
             return {"field": key, "kind": "choice", "question": "Where's it going?",
                     "options": [_opt(c, ", ".join(cs), FLAGS[c]) for c, cs in engine.DEST_CITIES.items()]}
@@ -157,11 +171,28 @@ def _next_ask(state: dict) -> dict | None:
             return {"field": key, "kind": "date", "question": "When will it be ready to collect?",
                     "hint": "The day the pallets can be picked up.", "min": format_date(engine.today_london())}
         if key == "pallets":
-            return {"field": key, "kind": "number", "question": "How many pallets?", "unit": "pallets",
-                    "min": 1, "step": 1, "hint": "A standard pallet is about 120 × 100 cm."}
+            ask = {"field": key, "kind": "number", "question": "How many pallets?", "unit": "pallets",
+                   "min": 1, "step": 1, "hint": "A standard pallet is about 120 × 100 cm."}
+            plan = planner.suggest_pallets(b, state["items"], today)
+            if plan:
+                ask["plan"] = plan
+                ask["question"] = "How many pallets? Here's what I'd suggest"
+                ask["suggestions"] = [{
+                    "value": str(o["pallets"]), "label": f"{o['pallets']} pallet{'' if o['pallets'] == 1 else 's'}",
+                    "hint": f"{kg(round(o['per_pallet']))} each · {naming.name(o['carrier'])} · {money(o['cost'])}",
+                    "suggested": i == 0} for i, o in enumerate([plan["best"]] + plan["alternatives"])]
+            return ask
         if key == "gross_kg":
-            return {"field": key, "kind": "number", "question": "Roughly how heavy is everything?", "unit": "kg",
-                    "min": 1, "step": 1, "hint": "Include the boxes, packaging and the pallets themselves."}
+            ask = {"field": key, "kind": "number", "question": "Roughly how heavy is everything?", "unit": "kg",
+                   "min": 1, "step": 1, "hint": "Include the boxes, packaging and the pallets themselves."}
+            est = planner.estimate_gross(b, state["items"], today)
+            if est:
+                ask["estimate"] = est
+                ask["question"] = "Total weight? Here's my estimate"
+                ask["suggestions"] = [{"value": str(est["gross"]), "label": f"{num(est['gross'])} kg",
+                                       "hint": f"Goods {kg(est['net'])} + boxes + {est['pallets']} pallet{'' if est['pallets'] == 1 else 's'}",
+                                       "suggested": True}]
+            return ask
         if key == "dest_type":
             return {"field": key, "kind": "choice", "question": "Is it going to a warehouse or a business?",
                     "options": [_opt("Warehouse", "Distribution or fulfilment centre", "warehouse"),
@@ -179,12 +210,14 @@ def _next_ask(state: dict) -> dict | None:
         if key == "seller":
             return {"field": key, "kind": "text", "question": "What's your business called?",
                     "placeholder": "e.g. Northfield Goods"}
-    for idx, miss in chat_state.missing_item_fields(state):
-        label = state["items"][idx].get("description") or f"product {idx + 1}"
-        return {"field": "items", "kind": "item", "item_index": idx, "missing": miss,
-                "question": f"A few more details about the {label}",
-                "hint": "These go on the customs paperwork."}
-    return None
+    return _item_ask(state)
+
+
+def _public_ask(ask: dict | None) -> dict | None:
+    """The ask as the UI needs it (no internal planning objects)."""
+    if not ask:
+        return ask
+    return {k: v for k, v in ask.items() if k not in ("plan", "estimate")}
 
 
 def _ask_text(ask: dict | None) -> str:
@@ -208,6 +241,7 @@ def _commit(sess: dict, new_state: dict, changes: list[str], problems: list[str]
             review: Callable | None, today: date, hint: str = "", quiet_if_nothing: bool = False,
             answer: str = "", note: str = "") -> None:
     chat = sess["chat"]
+    old_state = chat["state"]
     was_complete = chat_state.is_complete(chat["state"])
     old = _check_chat(chat, review, today) if (chat["state"]["items"] or chat["turns"]) else None
     if user_text:
@@ -218,17 +252,17 @@ def _commit(sess: dict, new_state: dict, changes: list[str], problems: list[str]
     chat["turns"] += 1
     new = _check_chat(chat, review, today)
     diff = chat_state.result_diff(old, new) if old is not None else []
-    # One question at a time, matching the control shown under the message.
-    ask = _ask_text(next_ask(new_state))
-    done = ("Done. I've re-checked everything below." if was_complete else
-            "That's everything I need. Your check and the carrier I'd pick are below.")
+    # One question at a time, matching the control shown under the message, in the assistant's voice.
+    nxt = next_ask(new_state)
+    ask = voice.question(nxt, new_state) if nxt else (voice.DONE_AGAIN if was_complete else voice.DONE)
     if not changes and not problems:
-        text = ("I didn't pick up any booking details from that. " if not quiet_if_nothing else "") + (ask or done)
+        text = ("Hmm, I didn't catch any booking details in that one. " if not quiet_if_nothing else "") + ask
     else:
-        lead = hint.strip() if hint and "?" not in hint and len(hint) < 240 else ("Got it." if changes else "")
-        text = " ".join(p for p in [lead, " ".join(problems), ask or (done if not problems else "")] if p)
-    if any("calculated" in c for c in changes):
-        text += " (I worked out the box count and declared value from your products.)"
+        lead = voice.ack(old_state, new_state, chat["turns"]) if changes else ""
+        if hint and not lead:
+            lead = hint
+        calc = voice.CALCULATED if any("calculated" in c for c in changes) and not was_complete else ""
+        text = " ".join(p for p in [lead, calc, " ".join(problems), ask] if p)
     if note:
         text = f"{note} {text}"
     if answer:
@@ -272,7 +306,13 @@ def handle_event(sess: dict, ev: dict, *, extractor: Callable | None = None, rev
         text = str(ev.get("text") or "").strip()[:MAX_MESSAGE]
         if not text:
             return sess
-        steer = _ask_text(next_ask(st)) or "Tap any detail of your booking to change it."
+        steer = voice.question(next_ask(st), st) if next_ask(st) else "Tap any detail of your booking to change it, or ask me about the paperwork."
+        cur = next_ask(st)
+        pick = next((o for o in (cur or {}).get("suggestions", []) if o.get("suggested")), None)
+        if pick and voice.accepts_suggestion(text):
+            new, changes, problems = chat_state.apply_patch(st, {"booking_updates": {cur["field"]: pick["value"]}})
+            _commit(sess, new, changes, problems, text, review, today)
+            return sess
         patch = extractor(text, st, chat["last_question"]) if extractor else None
         if patch is None:  # no AI (or it's down): approved answers by keyword, else treat as an answer
             topic = knowledge.match_topic(text)
@@ -291,17 +331,14 @@ def handle_event(sess: dict, ev: dict, *, extractor: Callable | None = None, rev
         # Guardrails: the seller only ever sees curated text or our own questions.
         if intent == "off_topic":
             chat["messages"] += [{"role": "user", "text": text},
-                                 {"role": "assistant", "text": f"{knowledge.OFF_TOPIC_REPLY}\n\n{steer}"}]
+                                 {"role": "assistant", "text": f"{voice.OFF_TOPIC}\n\n{steer}"}]
             return sess
         if not has_updates and intent in ("question", "greeting"):
-            lead = answer or ("Hi! " if intent == "greeting" else
-                              "I don't have a checked answer for that, so I won't guess. I can help with your booking "
-                              "and its customs paperwork.")
+            lead = answer or (voice.GREETING if intent == "greeting" else voice.UNKNOWN_QUESTION)
             chat["messages"] += [{"role": "user", "text": text}, {"role": "assistant", "text": f"{lead}\n\n{steer}"}]
             return sess
         dropped = patch.get("dropped") or []
-        note = (f"I couldn't find the {', '.join(dict.fromkeys(dropped))} in your message, so I didn't fill "
-                f"{'it' if len(set(dropped)) == 1 else 'them'} in." if dropped else "")
+        note = voice.dropped(dropped) if dropped else ""
         new, changes, problems = chat_state.apply_patch(st, patch)
         _commit(sess, new, changes, problems, text, review, today, answer=answer, note=note)
     elif kind in ("answer", "edit"):
@@ -645,7 +682,7 @@ def chat_view(sess: dict, review: Callable | None, today: date) -> dict:
     res = _check_chat(chat, review, today) if started else None
     return {
         "messages": chat["messages"][-60:],
-        "ask": next_ask(state),
+        "ask": _public_ask(next_ask(state)),
         "rows": _booking_rows(state),
         "items": [{"index": i, **{k: it.get(k) for k in chat_state.ITEM_KEYS}, "calculated_cartons": bool(it.get("_cartons_derived")),
                    "missing": [f for f in chat_state.ITEM_ASK_ORDER if engine.is_blank(it.get(f))]}

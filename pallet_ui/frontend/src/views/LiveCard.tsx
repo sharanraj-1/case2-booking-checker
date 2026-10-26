@@ -72,7 +72,12 @@ export function LiveCard({ chat, ctx }: { chat: ChatView; ctx: AskCtx }) {
   const [open, setOpen] = useState<string | null>(null);
   const [editItem, setEditItem] = useState<number | null>(null);
   const r = chat.result;
-  const pick = r?.options.find((o) => o.picked);
+  const answered = (k: string) => !!chat.rows.find((x) => x.key === k)?.display;
+  const loadKnown = answered("pallets") && answered("gross_kg");
+  const pick = loadKnown ? r?.options.find((o) => o.picked) : undefined;
+  // Which answers each check needs; until they're in, the check shows as waiting rather than failing.
+  const needs: Record<string, string[]> = { "R-05": ["pallets", "gross_kg"], "R-07": ["gross_kg"], "R-08": ["dest_type"], "R-10": ["ready_date"] };
+  const waiting = (id: string) => !chat.complete && (needs[id] ?? []).some((k) => !answered(k));
   const ruleIcon = { Pass: <Check className="h-3 w-3 text-good" />, Red: <X className="h-3 w-3 text-bad" />, Amber: <AlertTriangle className="h-3 w-3 text-warn" />, Data: <CircleDashed className="h-3 w-3 text-faint" /> };
   return (
     <div className="glass rounded-3xl p-5 sm:p-6">
@@ -162,7 +167,8 @@ export function LiveCard({ chat, ctx }: { chat: ChatView; ctx: AskCtx }) {
             {r.rules.map((x) => (
               <button key={x.id} title={`${x.id}: ${x.why}`} onClick={() => { if (!focusEl(`f-${x.id}`)) focusEl("checks-grid"); }}
                 className="tile flex min-h-[36px] items-center gap-1.5 rounded-xl border border-white/6 bg-white/[0.02] px-2 py-1.5 text-[12px]">
-                {ruleIcon[x.state]}<span className={cn("truncate", x.state === "Pass" ? "text-fg/80" : x.state === "Data" ? "text-faint" : "text-fg")}>{x.name}</span>
+                {waiting(x.id) ? ruleIcon.Data : ruleIcon[x.state]}
+                <span className={cn("truncate", waiting(x.id) ? "text-faint" : x.state === "Pass" ? "text-fg/80" : x.state === "Data" ? "text-faint" : "text-fg")}>{x.name}</span>
               </button>
             ))}
           </div>
