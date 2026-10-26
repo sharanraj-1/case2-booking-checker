@@ -4,7 +4,7 @@ import { AlertTriangle, Check, ChevronRight, CircleDashed, Minus, Pencil, Plus, 
 import { useState } from "react";
 import { Button, Limit, Pill } from "../components/fx";
 import { Flag } from "../components/Icon";
-import { cn, EASE, focusEl, niceDate, toDDMMYYYY, toISO } from "../lib/cn";
+import { cn, EASE, focusEl, niceDate, softFocus, toDDMMYYYY, toISO } from "../lib/cn";
 import type { ChatView, Row } from "../types";
 import { ItemForm, type AskCtx } from "./Ask";
 
@@ -57,7 +57,7 @@ function Editor({ row, ctx, close }: { row: Row; ctx: AskCtx; close: () => void 
           </div>
         ) : (
           <div className="flex gap-2">
-            <input autoFocus type={row.kind === "date" ? "date" : "text"} inputMode={row.kind === "number" || row.kind === "stepper" ? "decimal" : undefined} value={v} onChange={(e) => setV(e.target.value)}
+            <input ref={softFocus} type={row.kind === "date" ? "date" : "text"} inputMode={row.kind === "number" || row.kind === "stepper" ? "decimal" : undefined} value={v} onChange={(e) => setV(e.target.value)}
               maxLength={row.key === "seller" ? ctx.limits.seller_max : 40} min={row.kind === "date" ? toISO(ctx.today) : undefined}
               onKeyDown={(e) => e.key === "Enter" && commit(row.kind === "date" ? toDDMMYYYY(v) : v)} className="field h-10 flex-1 text-[14px]" />
             <Button size="sm" onClick={() => commit(row.kind === "date" ? toDDMMYYYY(v) : v)}>Save</Button>

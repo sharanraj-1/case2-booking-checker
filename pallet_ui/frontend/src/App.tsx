@@ -146,7 +146,7 @@ export default function App() {
       <Nav tab={tab} setTab={(t) => { setTab(t); toTop(); }} ai={p.ai} onPalette={() => setPalette(true)} />
       <main className="mx-auto max-w-[1180px] px-4 pb-24 sm:px-6">
         <AnimatePresence mode="wait">
-          <motion.div key={tab} initial={{ opacity: 0, y: 14, filter: "blur(6px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} exit={{ opacity: 0, y: -10, filter: "blur(6px)" }} transition={{ duration: 0.45, ease: EASE }}>
+          <motion.div key={tab} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.35, ease: EASE }}>
             {tab === "book" ? (
               <BookView chat={p.chat} ctx={ctx} ai={p.ai} pendingText={pendingText} started={started} composerRef={composerRef}
                 onStart={goBook} onFile={goFile} onConfirm={() => send({ type: "confirm" })}

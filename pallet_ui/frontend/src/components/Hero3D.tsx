@@ -1,6 +1,6 @@
 // Floating glass cargo cubes around a glowing core; the group leans toward the cursor.
 import { Canvas, useFrame } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
 const CUBES: { p: [number, number, number]; s: number; speed: number }[] = [
@@ -75,15 +75,26 @@ function Scene() {
 }
 
 export default function Hero3D() {
+  const wrap = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    if (!wrap.current) return;
+    const io = new IntersectionObserver(([e]) => setVisible(e.isIntersecting), { threshold: 0.05 });
+    io.observe(wrap.current);
+    return () => io.disconnect();
+  }, []);
   return (
-    <Canvas dpr={[1, 1.75]} camera={{ position: [0, 0, 6.2], fov: 42 }} gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
-      eventSource={document.getElementById("root") ?? undefined} eventPrefix="client">
+    <div ref={wrap} className="h-full w-full">
+      <Canvas dpr={[1, 1.25]} frameloop={visible ? "always" : "never"} camera={{ position: [0, 0, 6.2], fov: 42 }}
+        gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+        eventSource={document.getElementById("root") ?? undefined} eventPrefix="client">
       <ambientLight intensity={0.35} />
       <pointLight position={[4, 3, 4]} intensity={60} color="#8b5cf6" />
       <pointLight position={[-4, -2, 3]} intensity={50} color="#22d3ee" />
       <pointLight position={[0, 4, -3]} intensity={40} color="#f43f5e" />
       <directionalLight position={[0, 0, 5]} intensity={0.9} />
-      <Scene />
-    </Canvas>
+        <Scene />
+      </Canvas>
+    </div>
   );
 }

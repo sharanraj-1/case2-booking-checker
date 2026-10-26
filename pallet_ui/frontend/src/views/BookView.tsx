@@ -32,11 +32,11 @@ export function Hero({ onStart, onFile, ai }: { onStart: () => void; onFile: () 
         </motion.div>
         <h1 className="text-[40px] font-semibold leading-[1.02] tracking-[-0.045em] sm:text-[60px]">
           {words.map((w, i) => (
-            <motion.span key={i} className="mr-[0.22em] inline-block" initial={{ opacity: 0, y: 24, filter: "blur(8px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            <motion.span key={i} className="mr-[0.22em] inline-block" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 + i * 0.07, duration: 0.8, ease: EASE }}>{w}</motion.span>
           ))}
           <br />
-          <motion.span className="text-gradient inline-block" initial={{ opacity: 0, y: 24, filter: "blur(8px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+          <motion.span className="text-gradient inline-block" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.42, duration: 0.9, ease: EASE }}>minus the paperwork surprises.</motion.span>
         </h1>
         <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.7, ease: EASE }}
@@ -55,7 +55,7 @@ export function Hero({ onStart, onFile, ai }: { onStart: () => void; onFile: () 
       </div>
       {wide && (
         <motion.div initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3, duration: 1.2, ease: EASE }} className="relative h-[420px]">
-          <div className="absolute inset-[18%] rounded-full bg-violet/25 blur-[80px]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle,rgba(139,92,246,0.28)_0%,transparent_60%)]" />
           <Suspense fallback={<div className="grid h-full place-items-center"><Skeleton className="h-48 w-48 rounded-full" /></div>}><Hero3D /></Suspense>
         </motion.div>
       )}
@@ -66,10 +66,10 @@ export function Hero({ onStart, onFile, ai }: { onStart: () => void; onFile: () 
 function Bubble({ m, i, latest }: { m: Message; i: number; latest?: boolean }) {
   const me = m.role === "user";
   return (
-    <motion.div layout initial={me ? { opacity: 0, x: 24, scale: 0.96 } : { opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+    <motion.div initial={me ? { opacity: 0, x: 24, scale: 0.96 } : { opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
       transition={{ type: "spring", stiffness: 260, damping: 26, delay: Math.min(i, 2) * 0.03 }}
       className={cn("flex items-end gap-2.5", me && "justify-end")}>
-      {!me && <AssistantAvatar size={30} />}
+      {!me && <AssistantAvatar size={30} still={!latest} />}
       <div className={cn("relative max-w-[86%] whitespace-pre-line rounded-[22px] px-4 py-3 text-[14.5px] leading-relaxed",
         me ? "rounded-br-md bg-[linear-gradient(135deg,#7c3aed,#4f46e5_55%,#0e7490)] text-white shadow-[0_10px_30px_rgba(109,40,217,0.35)]"
           : "rounded-bl-md border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.075),rgba(255,255,255,0.035))] text-fg/95 shadow-[0_8px_24px_rgba(0,0,0,0.25)]")}>

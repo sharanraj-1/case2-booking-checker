@@ -7,9 +7,9 @@ export function Ambient() {
   return (
     <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(139,92,246,0.10),transparent_55%)]" />
-      <div className="orb drift-a" style={{ width: "46vw", height: "46vw", left: "-12vw", top: "-14vw", background: "#8b5cf6" }} />
-      <div className="orb drift-b" style={{ width: "40vw", height: "40vw", right: "-10vw", top: "18vh", background: "#22d3ee" }} />
-      <div className="orb drift-c" style={{ width: "36vw", height: "36vw", left: "28vw", bottom: "-18vw", background: "#f43f5e" }} />
+      <div className="orb drift-a" style={{ width: "60vw", height: "60vw", left: "-19vw", top: "-21vw", background: "radial-gradient(circle, #8b5cf6 0%, transparent 65%)" }} />
+      <div className="orb drift-b" style={{ width: "54vw", height: "54vw", right: "-17vw", top: "calc(18vh - 7vw)", background: "radial-gradient(circle, #22d3ee 0%, transparent 65%)" }} />
+      <div className="orb drift-c" style={{ width: "50vw", height: "50vw", left: "21vw", bottom: "-25vw", background: "radial-gradient(circle, #f43f5e 0%, transparent 65%)" }} />
       <div className="absolute inset-0 opacity-[0.035] [background-image:linear-gradient(rgba(255,255,255,.6)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.6)_1px,transparent_1px)] [background-size:56px_56px] [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_75%)]" />
     </div>
   );
@@ -152,7 +152,7 @@ export function Pill({ tone, children, className }: { tone: "red" | "amber" | "g
 
 export function Counter({ value }: { value: number }) {
   return (
-    <motion.span key={value} initial={{ opacity: 0, y: 10, filter: "blur(4px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} transition={{ duration: 0.5, ease: EASE }}>
+    <motion.span key={value} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}>
       {value}
     </motion.span>
   );

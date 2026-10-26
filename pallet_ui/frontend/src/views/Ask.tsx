@@ -4,7 +4,7 @@ import { ArrowRight, ChevronRight, ExternalLink, Minus, Plus, Sparkles } from "l
 import { useEffect, useMemo, useState } from "react";
 import { Button, Limit } from "../components/fx";
 import { OptionIcon } from "../components/Icon";
-import { addDays, cn, EASE, fmt, niceDate, toDDMMYYYY, toISO } from "../lib/cn";
+import { addDays, cn, EASE, fmt, niceDate, softFocus, toDDMMYYYY, toISO } from "../lib/cn";
 import type { Ask, Item, Limits, Send } from "../types";
 
 export interface AskCtx { send: Send; pending: boolean; pendingType: string | null; today: string; coo: string[]; fields: Record<string, [string, string, string, string]>; tariff: string; limits: Limits }
@@ -85,7 +85,7 @@ function NumberAsk({ ask, ctx }: { ask: Ask; ctx: AskCtx }) {
       <div className="flex items-stretch gap-2">
         {isPallets && <StepBtn onClick={() => setV(String(Math.max(1, (n || 1) - 1)))}><Minus className="h-4 w-4" /></StepBtn>}
         <div className="relative flex-1">
-          <input autoFocus inputMode="decimal" type="number" min={ask.min as number} step={ask.step} value={v} onChange={(e) => setV(e.target.value)}
+          <input ref={softFocus} inputMode="decimal" type="number" min={ask.min as number} step={ask.step} value={v} onChange={(e) => setV(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()} placeholder={isPallets ? "e.g. 2" : "e.g. 620"}
             className="field h-14 pr-20 text-center text-[22px] font-semibold tracking-[-0.02em]" />
           <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[14px] text-muted">{ask.unit}</span>
@@ -137,7 +137,7 @@ function TextAsk({ ask, ctx }: { ask: Ask; ctx: AskCtx }) {
   return (
     <div>
       <div className="flex gap-2">
-        <input autoFocus value={v} maxLength={max} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} placeholder={ask.placeholder} className="field h-12 flex-1" />
+        <input ref={softFocus} value={v} maxLength={max} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} placeholder={ask.placeholder} className="field h-12 flex-1" />
         <Button disabled={!v.trim() || ctx.pending} onClick={submit}>Continue</Button>
       </div>
       <Limit text={`${ask.limit ?? ""} ${v.length}/${max} used.`.trim()} over={v.length >= max ? `That's the maximum: ${max} characters.` : null} />

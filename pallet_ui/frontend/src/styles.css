@@ -31,19 +31,18 @@ body {
 ::selection { background: rgba(139, 92, 246, 0.45); }
 * { -webkit-tap-highlight-color: transparent; }
 
-/* Frosted glass surface */
+/* Frosted glass surface. No backdrop blur: the background behind is already soft, and a live blur
+   under every card has to be redrawn on each scroll frame. */
 .glass {
-  background: rgba(255, 255, 255, 0.045);
+  background: linear-gradient(rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.03)), rgba(11, 13, 18, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.09);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 8px 32px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.25);
 }
 .glass-strong {
   background: rgba(14, 16, 22, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55), 0 1px 0 rgba(255, 255, 255, 0.06) inset;
 }
 
@@ -57,7 +56,7 @@ body {
 .text-gradient-red { background: linear-gradient(100deg, #fca5a5, #f43f5e); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 
 /* Ambient orbs */
-.orb { position: absolute; border-radius: 9999px; filter: blur(100px); opacity: 0.17; will-change: transform; }
+.orb { position: absolute; border-radius: 9999px; opacity: 0.2; will-change: transform; contain: strict; }
 @keyframes drift-a { 0%,100% { transform: translate3d(0,0,0) scale(1); } 50% { transform: translate3d(8vw, 6vh, 0) scale(1.15); } }
 @keyframes drift-b { 0%,100% { transform: translate3d(0,0,0) scale(1.1); } 50% { transform: translate3d(-10vw, -4vh, 0) scale(0.9); } }
 @keyframes drift-c { 0%,100% { transform: translate3d(0,0,0) scale(1); } 50% { transform: translate3d(-4vw, 8vh, 0) scale(1.2); } }
@@ -73,12 +72,13 @@ body {
 .glow-border::before, .glow-border::after {
   content: ""; position: absolute; border-radius: inherit; pointer-events: none;
   background: conic-gradient(from var(--angle), #8b5cf6, #22d3ee, #f43f5e, #8b5cf6);
-  animation: spin-angle 4s linear infinite;
+  animation: spin-angle 5s linear infinite;
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor; mask-composite: exclude;
 }
 .glow-border::before { inset: -1.5px; padding: 1.5px; z-index: 1; }
-.glow-border::after { inset: -6px; padding: 6px; z-index: -1; filter: blur(10px); opacity: 0.55; }
+.glow-border::after { inset: 0; padding: 0; z-index: -1; background: none; animation: none; -webkit-mask: none; mask: none;
+  box-shadow: 0 0 22px rgba(139, 92, 246, 0.3), 0 0 36px rgba(34, 211, 238, 0.12); }
 
 /* Metallic shimmer sweep */
 @keyframes sweep { 0% { transform: translateX(-120%) skewX(-20deg); } 60%, 100% { transform: translateX(220%) skewX(-20deg); } }
@@ -106,6 +106,18 @@ body {
   background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), rgba(255, 255, 255, 0.14), transparent 45%);
 }
 .tilt:hover .sheen { opacity: 1; }
+
+/* Assistant avatar and typing dots */
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes breathe { 0%,100% { transform: scale(1); opacity: 0.85; } 50% { transform: scale(1.12); opacity: 1; } }
+@keyframes hop { 0%,100% { transform: translateY(0); opacity: 0.5; } 50% { transform: translateY(-6px); opacity: 1; } }
+@keyframes ring-out { 0% { transform: scale(1); opacity: 0.7; } 100% { transform: scale(1.5); opacity: 0; } }
+.spin-slow { animation: spin 6s linear infinite; }
+.spin-fast { animation: spin 1.6s linear infinite; }
+.breathe { animation: breathe 2.8s ease-in-out infinite; }
+.breathe-fast { animation: breathe 0.9s ease-in-out infinite; }
+.hop { animation: hop 0.9s ease-in-out infinite; }
+.ring-out { animation: ring-out 1.6s ease-out infinite; }
 
 /* Route line animation */
 @keyframes dash { to { stroke-dashoffset: -20; } }

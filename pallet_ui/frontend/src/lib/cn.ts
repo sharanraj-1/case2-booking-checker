@@ -54,3 +54,13 @@ export function focusEl(id: string) {
   el.classList.add("flash");
   return true;
 }
+
+/** Ref callback: focus a new input and glide it into view, instead of the browser snapping the page to it. */
+export function softFocus(el: HTMLElement | null) {
+  if (!el) return;
+  requestAnimationFrame(() => {
+    el.focus({ preventScroll: true });
+    const r = el.getBoundingClientRect();  // leave room for the button and limit under it
+    if (r.top < 90 || r.bottom + 150 > window.innerHeight) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+}
