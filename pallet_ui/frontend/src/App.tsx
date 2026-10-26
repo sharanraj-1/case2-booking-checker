@@ -5,7 +5,7 @@ import { CommandPalette, Icons, type PaletteAction } from "./components/CommandP
 import { Ambient, ScrollProgress, Skeleton } from "./components/fx";
 import { Nav, type Tab } from "./components/Nav";
 import { EASE } from "./lib/cn";
-import { connect, eventId, setFrameHeight, setValue } from "./streamlit";
+import { connect, eventId, healthUrl, setFrameHeight, setValue, standalone } from "./streamlit";
 import type { Payload, UIEvent } from "./types";
 import { BookView } from "./views/BookView";
 import { downloadB64, FileView } from "./views/FileView";
@@ -14,11 +14,11 @@ interface Pending { id: string; type: string; label?: string }
 
 /** The component is served by the Streamlit server; its health endpoint sits beside /component/. */
 async function serverAlive(): Promise<boolean> {
-  const base = window.location.href.split("/component/")[0];
+
   try {
     const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 4000);
-    const r = await fetch(`${base}/_stcore/health`, { cache: "no-store", signal: ctrl.signal });
+    const t = setTimeout(() => ctrl.abort(), standalone ? 12000 : 4000);  // serverless may need a cold start
+    const r = await fetch(healthUrl(), { cache: "no-store", signal: ctrl.signal });
     clearTimeout(t);
     return r.ok;
   } catch {
@@ -152,7 +152,7 @@ export default function App() {
                 onStart={goBook} onFile={goFile} onConfirm={() => send({ type: "confirm" })}
                 onReset={() => { send({ type: "reset" }); setStartedLocal(false); toTop(); }} />
             ) : (
-              <FileView file={p.file} send={send} pendingType={pending?.type ?? null} pending={!!pending && ["sample", "upload", "file_clear"].includes(pending.type)} inputRef={fileInputRef} openId={openId} setOpenId={setOpenId} />
+              <FileView file={p.file} send={send} uploadMb={p.limits.upload_mb} pendingType={pending?.type ?? null} pending={!!pending && ["sample", "upload", "file_clear"].includes(pending.type)} inputRef={fileInputRef} openId={openId} setOpenId={setOpenId} />
             )}
           </motion.div>
         </AnimatePresence>
@@ -168,7 +168,7 @@ export default function App() {
               <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-bad shadow-[0_0_12px_#f87171]" />
               <span className="min-w-0 flex-1">
                 <span className="font-semibold text-white">Can't reach the app.</span>{" "}
-                <span className="text-muted">The server has stopped or the connection dropped. Start it again with <code className="font-mono text-fg">streamlit run app.py</code>, then reload.</span>
+                <span className="text-muted">{standalone ? "The server isn't responding or your connection dropped. Please try again in a moment." : <>The server has stopped or the connection dropped. Start it again with <code className="font-mono text-fg">streamlit run app.py</code>, then reload.</>}</span>
               </span>
               <button onClick={() => { try { window.parent.location.reload(); } catch { window.location.reload(); } }}
                 className="press rounded-xl bg-white/10 px-3.5 py-2 text-[13px] font-medium hover:bg-white/15">Reload page</button>

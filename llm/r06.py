@@ -2,35 +2,28 @@
 
 from __future__ import annotations
 
-import streamlit as st
-
 import engine
 from llm import client, prompts
 
 _ANSWERS = {"yes", "no", "unsure"}
 _CATEGORIES = {"lithium battery", "aerosol", "flammable liquid", "none"}
-
-
-class _ReviewFailed(Exception):
-    pass
-
-
-@st.cache_data(show_spinner=False, max_entries=1000)
-def _classify_cached(description: str, matched: str) -> dict:
-    obj = client.call_json(prompts.R06_SYSTEM, prompts.r06_user(description, matched))
-    if not obj or str(obj.get("contains_dg", "")).lower() not in _ANSWERS:
-        raise _ReviewFailed  # exceptions aren't cached, so a later run can try again
-    cat = str(obj.get("category", "none")).lower()
-    return {"contains_dg": str(obj["contains_dg"]).lower(),
-            "category": cat if cat in _CATEGORIES else "none",
-            "why": str(obj.get("why", ""))[:300]}
+_cache: dict[tuple[str, str], dict] = {}  # per process; only successful reviews are kept
 
 
 def classify(description: str, matched: str) -> dict | None:
-    try:
-        return _classify_cached(description.strip(), matched)
-    except Exception:
-        return None
+    key = (description.strip(), matched)
+    if key in _cache:
+        return _cache[key]
+    obj = client.call_json(prompts.R06_SYSTEM, prompts.r06_user(*key))
+    if not obj or str(obj.get("contains_dg", "")).lower() not in _ANSWERS:
+        return None  # not cached, so a later run can try again
+    cat = str(obj.get("category", "none")).lower()
+    review = {"contains_dg": str(obj["contains_dg"]).lower(),
+              "category": cat if cat in _CATEGORIES else "none",
+              "why": str(obj.get("why", ""))[:300]}
+    if len(_cache) < 1000:
+        _cache[key] = review
+    return review
 
 
 def ambiguous_items(result: engine.BookingResult) -> list[tuple[str, str]]:

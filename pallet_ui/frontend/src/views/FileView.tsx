@@ -27,8 +27,8 @@ export function downloadB64(b64: string, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-export function FileView({ file, send, pending, pendingType, inputRef, openId, setOpenId }: {
-  file: FV | null; send: Send; pending: boolean; pendingType: string | null; inputRef: React.RefObject<HTMLInputElement>; openId: string | null; setOpenId: (id: string | null) => void;
+export function FileView({ file, send, pending, pendingType, inputRef, openId, setOpenId, uploadMb = 15 }: {
+  file: FV | null; send: Send; pending: boolean; pendingType: string | null; uploadMb?: number; inputRef: React.RefObject<HTMLInputElement>; openId: string | null; setOpenId: (id: string | null) => void;
 }) {
   const [drag, setDrag] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -36,7 +36,7 @@ export function FileView({ file, send, pending, pendingType, inputRef, openId, s
   async function upload(list: FileList | File[] | null) {
     if (!list || !list.length) return;
     const arr = Array.from(list);
-    if (arr.some((f) => f.size > 15 * 1024 * 1024)) { setErr("That file is over 15 MB. Please upload just the Bookings and Items sheets."); return; }
+    if (arr.reduce((t, f) => t + f.size, 0) > uploadMb * 1024 * 1024) { setErr(`That's over the ${uploadMb} MB limit. Please upload just the Bookings and Items sheets.`); return; }
     setErr(null);
     try { send({ type: "upload", files: await readFiles(arr) }); } catch { setErr("We couldn't read that file. Please try again."); }
   }
@@ -63,7 +63,7 @@ export function FileView({ file, send, pending, pendingType, inputRef, openId, s
               </motion.div>
               <div className="mt-5 text-[20px] font-semibold tracking-[-0.02em]">Drop your Excel file here</div>
               <div className="mt-1.5 max-w-[480px] text-[14px] text-muted">One .xlsx with a <b className="text-fg">Bookings</b> sheet and an <b className="text-fg">Items</b> sheet, or two CSV files.</div>
-              <div className="mt-1 text-[12.5px] text-faint"><span className="font-medium text-muted">Limit:</span> up to 15 MB per file · .xlsx, .xlsm or .csv</div>
+              <div className="mt-1 text-[12.5px] text-faint"><span className="font-medium text-muted">Limit:</span> up to {uploadMb} MB in total · .xlsx, .xlsm or .csv</div>
               <div className="mt-6 flex flex-wrap justify-center gap-3">
                 <Button size="lg" glow onClick={() => inputRef.current?.click()}><FileSpreadsheet className="h-4.5 w-4.5" /> Choose file</Button>
                 <Button size="lg" variant="ghost" onClick={() => send({ type: "sample" })}><FlaskConical className="h-4.5 w-4.5" /> No file? Try an example</Button>

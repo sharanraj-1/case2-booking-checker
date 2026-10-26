@@ -26,7 +26,7 @@ Or by hand:
 python -m venv .venv
 .venv/Scripts/activate          # Windows; use `source .venv/bin/activate` on macOS/Linux
 pip install -r requirements-dev.txt
-streamlit run app.py
+streamlit run app.py          # or the Vercel version: python dev_server.py
 ```
 
 The built front end (`pallet_ui/frontend/dist`) is committed, so Node isn't needed to run or deploy. To change the UI:
@@ -59,6 +59,7 @@ pytest                         # everything: engine, chat merge logic, bridge (U
 | `tests/test_chat_state.py` | Chat merge logic as pure functions: add an item, update a field, relative edits ("+1 pallet"), remove an item by description, change pallets → re-check and diff, "make it Lyon" switches country, "Lyon, Germany" is asked about, synonyms, invalid values (Munich, Glasgow, bad dates), derived totals, apply-fix. |
 | `tests/test_bridge.py` | The UI's events end to end without a browser: a full no-AI conversation from empty to confirmed, typed answers, invalid answers, +1 pallet with its cost change, add/update/remove products, "Fix it" in chat and in file mode, undo, duplicate events ignored, AI extractor and its failure fallback, broken uploads, every sample booking serialising in plain English. |
 | `tests/test_guardrails.py` | Chatbot guardrails with the real grounding filter: off-topic refusal, prompt injection changes nothing, questions get only curated answers, unknown questions aren't guessed, invented values are dropped, unit conversions pass; closest-city/country suggestions; invoice checklist, draft invoice and country rules; live prices are advisory, hidden when the load changes, and failures are reported. |
+| `tests/test_api_core.py` | The Vercel path: the session goes through JSON on every request, a full booking, the example file with fix and undo, Excel dates surviving JSON, oversized uploads refused, tampered sessions reset, and the `api/event.py` handler itself. |
 | `tests/test_app_smoke.py` | `app.py` starts with no key; the built front end is present. |
 | `tests/test_chat_scripted.py` | Seven real conversations against the AI: vague start, missing fields, mid-conversation changes, off-topic, prompt injection, a paperwork question, and "Munich". **Skipped unless `OPENROUTER_API_KEY` is set.** |
 
@@ -146,11 +147,24 @@ Equal-weight min-max scoring picks Carrier C (the most expensive) on every route
 - **No paid APIs, no logins.** The carrier pick uses only the fixed rate card; live market prices are optional and advisory.
 - **Never crash:** the loader returns notices instead of raising (missing sheets/columns, orphan items, duplicate IDs, unreadable values), and each tab is wrapped so a bad file shows a message.
 
-## Deploy (Streamlit Community Cloud)
+## Deploy
 
-1. Push this folder to a GitHub repository (including `pallet_ui/frontend/dist`; `node_modules` is ignored).
-2. At [share.streamlit.io](https://share.streamlit.io), **Create app** → pick the repo, branch `main`, main file `app.py`.
-3. Optional: **Advanced settings → Secrets**: `OPENROUTER_API_KEY = "sk-or-v1-..."`. Without it, the app runs in guided (tap-to-answer) mode.
-4. Deploy, then open the URL in an incognito window and on a phone. Wake it up shortly before judging (free apps sleep when idle).
+The same app runs two ways; both use the same engine, bridge and React front end.
 
-`requirements.txt` is pinned; Python 3.12.
+### Vercel (static site + Python function)
+
+Vercel can't host Streamlit (it needs a long-running websocket server), so on Vercel the React app is served as static files and talks to a Python serverless function, `api/event.py`. Functions keep no memory between requests, so the browser holds the session (in the tab's `sessionStorage`; a refresh keeps your booking) and sends it with every event; `api_core.handle` applies the event with the same `bridge.py` and returns the new session plus the screen. `vercel.json` builds the front end and gives the function 60 s for AI and live-price calls; uploads are limited to 3 MB there (Vercel caps requests at 4.5 MB).
+
+1. Import the GitHub repo at [vercel.com/new](https://vercel.com/new) (no settings to change; `vercel.json` has them), or run `npx vercel` in this folder.
+2. In **Settings → Environment Variables**, add `OPENROUTER_API_KEY`. Without it, the app runs in guided (tap-to-answer) mode.
+3. Deploy. Run the Vercel version locally with `python dev_server.py` (http://localhost:8600).
+
+`requirements.txt` holds only what the function needs (no Streamlit, so it stays small); `requirements-dev.txt` adds Streamlit and pytest for local use.
+
+### Streamlit Community Cloud
+
+1. Add `streamlit==1.66.1` to `requirements.txt` (it's kept out so the Vercel function stays small).
+2. At [share.streamlit.io](https://share.streamlit.io), **Create app** → this repo, branch `main`, main file `app.py`.
+3. **Advanced settings → Secrets**: `OPENROUTER_API_KEY = "sk-or-v1-..."`.
+
+Python 3.12; all versions pinned.

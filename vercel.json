@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm ci --prefix pallet_ui/frontend",
+  "buildCommand": "npm run build --prefix pallet_ui/frontend",
+  "outputDirectory": "pallet_ui/frontend/dist",
+  "functions": {
+    "api/event.py": {
+      "maxDuration": 60,
+      "excludeFiles": "{tests/**,docs/**,pallet_ui/**,brag-output*/**,**/test_*.py,make_test_file.py,app.py,run.ps1,dev_server.py}"
+    }
+  }
+}
